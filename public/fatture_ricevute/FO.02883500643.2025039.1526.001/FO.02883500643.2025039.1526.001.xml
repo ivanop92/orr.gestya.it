@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns2:FileQuadraturaFTP xmlns:ns2="http://www.fatturapa.it/sdi/ftp/v2.0" versione="2.0">
+    <IdentificativoNodo>02883500643</IdentificativoNodo>
+    <DataOraCreazione>2025-02-08T14:40:43.557Z</DataOraCreazione>
+    <NomeSupporto>FO.02883500643.2025039.1526.001.zip</NomeSupporto>
+    <NumeroFile>
+        <File>
+            <Tipo>FA</Tipo>
+            <Numero>1</Numero>
+        </File>
+        <File>
+            <Tipo>MT</Tipo>
+            <Numero>1</Numero>
+        </File>
+    </NumeroFile>
+</ns2:FileQuadraturaFTP>
