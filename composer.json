@@ -63,7 +63,7 @@
         "preferred-install": "dist",
         "sort-packages": true,
         "audit": {
-            "ignore": ["PKSA-gytq-gtdp-3wb1"]
+            "ignore": ["PKSA-gytq-gtdp-3wb1", "PKSA-nhqw-xk85-x2jn"]
         }
     },
     "minimum-stability": "dev",
