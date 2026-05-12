@@ -2,21 +2,25 @@
 
 @php
     $tariffa_default = (float) ($azienda->manut_tariffa_oraria_default ?? 33.75);
-    // Pre-fetch righe di tutte le lavorazioni (per il modale Applica Lavorazione lato JS)
+
+    // UNA SOLA query JOIN per tutte le righe del catalogo, raggruppate per lavorazione (no N+1)
     $lavorazioni_payload = [];
-    if (isset($lavorazioni_disponibili)) {
+    if (isset($lavorazioni_disponibili) && count($lavorazioni_disponibili) > 0) {
+        $idsLav = collect($lavorazioni_disponibili)->pluck('id')->toArray();
+        $righe_raw = DB::table('lavorazioni_righe')
+            ->whereIn('id_lavorazione', $idsLav)
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('id_lavorazione')
+            ->orderBy('ordinamento')
+            ->get()
+            ->groupBy('id_lavorazione');
         foreach ($lavorazioni_disponibili as $lav) {
-            $righe = DB::table('lavorazioni_righe')
-                ->where('id_lavorazione', $lav->id)
-                ->where('id_azienda', $utente->id_azienda)
-                ->orderBy('ordinamento')
-                ->get();
             $lavorazioni_payload[] = [
                 'id'          => $lav->id,
                 'codice'      => $lav->codice,
                 'descrizione' => $lav->descrizione,
                 'totale'      => $lav->totale,
-                'righe'       => $righe,
+                'righe'       => $righe_raw->get($lav->id, collect()),
             ];
         }
     }
@@ -298,7 +302,6 @@
 </div>
 
 <script>
-    var LAVORAZIONI_PAYLOAD = @json($lavorazioni_payload);
     var TARIFFA_DEFAULT = {{ $tariffa_default }};
     var rowCounter = 0;
 
@@ -434,40 +437,57 @@
         document.getElementById('sdi_hidden').value  = opt.dataset.sdi  || '';
     });
 
-    // Filtro live nella modale (su righe E macro header)
-    document.getElementById('filtro_lav_modal').addEventListener('input', function(e) {
-        var q = e.target.value.toLowerCase().trim();
-        var matchByMacro = {};
-        document.querySelectorAll('.lav-riga-row').forEach(function(row) {
-            var match = (q === '' || row.dataset.search.indexOf(q) !== -1);
-            row.style.display = match ? '' : 'none';
-            if (match) matchByMacro[row.dataset.lavId] = true;
-        });
-        document.querySelectorAll('.lav-macro-header').forEach(function(h) {
-            var idLav = h.dataset.lavId;
-            var macroMatchesText = (q === '' || h.dataset.search.indexOf(q) !== -1);
-            h.style.display = (matchByMacro[idLav] || macroMatchesText) ? '' : 'none';
-        });
-    });
-
-    // "Spunta tutte le righe di questa macro"
-    document.querySelectorAll('.lav-macro-checkall').forEach(function(cb) {
-        cb.addEventListener('change', function() {
-            var idLav = cb.dataset.lavId;
-            document.querySelectorAll('.lav-riga-check[data-lav-id="'+idLav+'"]').forEach(function(rcb) {
-                // applica solo alle righe visibili (per rispettare il filtro)
-                if (rcb.closest('tr').style.display !== 'none') {
-                    rcb.checked = cb.checked;
-                }
+    // Filtro live nella modale, debounced per non rilanciare a ogni keystroke su dataset enormi
+    (function() {
+        var debounceTimer = null;
+        var righeCache = null, headersCache = null;
+        function getRighe() {
+            if (!righeCache) righeCache = document.querySelectorAll('.lav-riga-row');
+            return righeCache;
+        }
+        function getHeaders() {
+            if (!headersCache) headersCache = document.querySelectorAll('.lav-macro-header');
+            return headersCache;
+        }
+        function applicaFiltro(q) {
+            var matchByMacro = {};
+            getRighe().forEach(function(row) {
+                var match = (q === '' || row.dataset.search.indexOf(q) !== -1);
+                row.style.display = match ? '' : 'none';
+                if (match) matchByMacro[row.dataset.lavId] = true;
             });
-            aggiornaContegnoSelezione();
+            getHeaders().forEach(function(h) {
+                var idLav = h.dataset.lavId;
+                var macroMatchesText = (q === '' || h.dataset.search.indexOf(q) !== -1);
+                h.style.display = (matchByMacro[idLav] || macroMatchesText) ? '' : 'none';
+            });
+        }
+        document.getElementById('filtro_lav_modal').addEventListener('input', function(e) {
+            var q = e.target.value.toLowerCase().trim();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function(){ applicaFiltro(q); }, 200);
         });
-    });
+    })();
 
-    // Aggiorna conteggio al cambio singola riga
-    document.querySelectorAll('.lav-riga-check').forEach(function(cb) {
-        cb.addEventListener('change', aggiornaContegnoSelezione);
-    });
+    // Event delegation singolo invece di N listener sui checkbox (perf su migliaia di righe)
+    var _modalEl = document.getElementById('modal_applica_lav_form');
+    if (_modalEl) {
+        _modalEl.addEventListener('change', function(e) {
+            var t = e.target;
+            if (!t) return;
+            if (t.classList.contains('lav-macro-checkall')) {
+                var idLav = t.dataset.lavId;
+                document.querySelectorAll('.lav-riga-check[data-lav-id="'+idLav+'"]').forEach(function(rcb) {
+                    if (rcb.closest('tr').style.display !== 'none') {
+                        rcb.checked = t.checked;
+                    }
+                });
+                aggiornaContegnoSelezione();
+            } else if (t.classList.contains('lav-riga-check')) {
+                aggiornaContegnoSelezione();
+            }
+        });
+    }
 
     // Add: parte con 1 riga vuota
     document.addEventListener('DOMContentLoaded', function() {
