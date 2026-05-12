@@ -51,6 +51,12 @@ $num_da_registrare = DB::select('SELECT ifnull(COUNT(id),0) AS num FROM dotes WH
                         <li class="nav-item">
                             <a href="/utente/agenti" class="nav-link" data-key="t-analytics">Agenti</a>
                         </li>
+
+                        <?php if (!empty($azienda->manut_anagrafica_vagoni_attiva)) { ?>
+                        <li class="nav-item">
+                            <a href="/utente/vagoni" class="nav-link" data-key="t-vagoni">Vagoni</a>
+                        </li>
+                        <?php } ?>
                         <?php } ?>
 
                     </ul>

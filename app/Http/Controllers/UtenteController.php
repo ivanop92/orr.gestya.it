@@ -11099,6 +11099,115 @@ ORDER BY s.data_scadenza ASC',
         return $mpdf->Output('scadenze.pdf', Destination::DOWNLOAD);
     }
 
+    public function vagoni(Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        if (isset($dati['aggiungi'])) {
+            unset($dati['aggiungi']);
+            $dati['id_azienda'] = $utente->id_azienda;
+            $dati['id_utente']  = $utente->id;
+            $dati['attivo']     = isset($dati['attivo']) ? 1 : 1;
+            $dati = $this->normalizza_vagone($dati);
+
+            DB::table('vagoni')->insert($dati);
+            return Redirect::to('utente/vagoni')->with('success', 'Vagone aggiunto con successo');
+        }
+
+        if (isset($dati['elimina'])) {
+            DB::table('vagoni')
+                ->where('id', $dati['id'])
+                ->where('id_azienda', $utente->id_azienda)
+                ->delete();
+            return Redirect::to('utente/vagoni')->with('success', 'Vagone eliminato con successo');
+        }
+
+        $vagoni = DB::table('vagoni')
+            ->leftJoin('clienti', 'clienti.id', '=', 'vagoni.id_cliente')
+            ->where('vagoni.id_azienda', $utente->id_azienda)
+            ->select('vagoni.*', 'clienti.ragione_sociale as cliente_ragione_sociale')
+            ->orderBy('vagoni.codice')
+            ->get();
+
+        $clienti = DB::table('clienti')
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('ragione_sociale')
+            ->get();
+
+        $page = 'vagoni';
+        return View::make('utente.vagoni', compact('utente', 'vagoni', 'clienti', 'page'));
+    }
+
+    public function dettaglio_vagone($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        if (isset($dati['modifica'])) {
+            unset($dati['modifica']);
+            $dati['attivo'] = isset($dati['attivo']) ? 1 : 0;
+            $dati = $this->normalizza_vagone($dati);
+
+            DB::table('vagoni')
+                ->where('id', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->update($dati);
+            return Redirect::to('utente/dettaglio_vagone/'.$id)->with('success', 'Vagone modificato con successo');
+        }
+
+        $vagone = DB::table('vagoni')
+            ->where('id', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->first();
+
+        if (!$vagone) {
+            return Redirect::to('utente/vagoni')->with('error', 'Vagone non trovato');
+        }
+
+        $clienti = DB::table('clienti')
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('ragione_sociale')
+            ->get();
+
+        $page = 'vagoni';
+        return View::make('utente.dettaglio_vagone', compact('utente', 'vagone', 'clienti', 'page'));
+    }
+
+    private function normalizza_vagone(array $dati): array
+    {
+        unset($dati['_token']);
+
+        $campi_numerici = [
+            'id_cliente', 'id_sede',
+            'intervallo_revisione_mesi',
+            'peso_a_vuoto_kg', 'portata_massima_kg', 'lunghezza_metri',
+        ];
+        foreach ($campi_numerici as $c) {
+            if (array_key_exists($c, $dati) && ($dati[$c] === '' || $dati[$c] === null)) {
+                $dati[$c] = null;
+            }
+        }
+
+        $campi_data = ['data_immatricolazione', 'data_ultima_revisione_generale'];
+        foreach ($campi_data as $c) {
+            if (array_key_exists($c, $dati) && ($dati[$c] === '' || $dati[$c] === null)) {
+                $dati[$c] = null;
+            }
+        }
+
+        $decimali = ['peso_a_vuoto_kg', 'portata_massima_kg', 'lunghezza_metri'];
+        foreach ($decimali as $c) {
+            if (isset($dati[$c]) && is_string($dati[$c]) && $dati[$c] !== '') {
+                $dati[$c] = (float) str_replace(',', '.', $dati[$c]);
+            }
+        }
+
+        return $dati;
+    }
+
     public function esportaScadenzeRecuperoCrediti(Request $request) {
         $this->is_loggato();
         $utente = session('utente');
