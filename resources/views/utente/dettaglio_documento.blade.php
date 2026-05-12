@@ -105,6 +105,7 @@
                             <table class="table table-borderless text-center table-nowrap align-middle mb-0">
                                 <thead>
                                 <tr class="table-active">
+                                    <th scope="col" style="width:32px;"></th>
                                     <th scope="col">Prodotto</th>
                                     <th scope="col">Dettagli</th>
                                     <th scope="col">Lotto</th>
@@ -114,9 +115,10 @@
                                     <th scope="col" style="width: 150px;">Importo</th>
                                 </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="righe-doc-sortable">
                                 @foreach($righe as $riga)
-                                    <tr>
+                                    <tr data-id="{{$riga->id}}">
+                                        <td class="text-center riga-drag-handle" style="cursor:grab; width:32px;" title="Trascina per riordinare"><i class="ri-drag-move-2-line text-muted"></i></td>
                                         <td class="fw-medium">{{$riga->nome_prodotto}}</td>
                                         <td>{{$riga->dettagli_prodotto}}</td>
                                         <td>{{$riga->lotto}}</td>
@@ -590,3 +592,31 @@
         opacity: 1;
     }
 </style>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var el = document.getElementById('righe-doc-sortable');
+        if (el && typeof Sortable !== 'undefined') {
+            Sortable.create(el, {
+                handle: '.riga-drag-handle',
+                animation: 150,
+                onEnd: function() {
+                    var ids = Array.from(el.querySelectorAll('tr[data-id]')).map(function(tr){ return tr.getAttribute('data-id'); });
+                    var fd = new FormData();
+                    fd.append('_token', '{{ csrf_token() }}');
+                    ids.forEach(function(id){ fd.append('ids[]', id); });
+                    fetch('/utente/ajax/ordina_righe_documento/{{ $dotes->id }}', {
+                        method: 'POST',
+                        body: fd,
+                        credentials: 'same-origin',
+                        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                    }).then(function(r){ return r.json(); })
+                      .then(function(json){
+                          if (!json.ok) { alert('Errore nel riordino: ' + (json.error || 'sconosciuto')); }
+                      });
+                }
+            });
+        }
+    });
+</script>

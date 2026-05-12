@@ -11198,6 +11198,27 @@ ORDER BY s.data_scadenza ASC',
         return redirect()->back()->with('error', $msg);
     }
 
+    public function ordina_righe_documento($id_dotes, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $ids = $request->input('ids', []);
+
+        if (!is_array($ids)) {
+            return response()->json(['ok' => false, 'error' => 'ids deve essere array']);
+        }
+
+        foreach ($ids as $idx => $id_riga) {
+            DB::table('dorig')
+                ->where('id', (int) $id_riga)
+                ->where('id_dotes', (int) $id_dotes)
+                ->where('id_azienda', $utente->id_azienda)
+                ->update(['n_riga' => $idx + 1]);
+        }
+
+        return response()->json(['ok' => true, 'count' => count($ids)]);
+    }
+
     public function applica_lavorazioni_a_documento($id_dotes, Request $request)
     {
         $this->is_loggato();
