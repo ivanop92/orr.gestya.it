@@ -82,6 +82,13 @@ class ApplicaLavorazione
                     'imponibile'                  => $imponibile,
                     'imposta'                     => $imposta,
                     'totale'                      => $totale,
+                    // Campi lavorazione preservati nella riga del documento
+                    'servizio'                    => $r->servizio,
+                    'setup_tank'                  => isset($r->setup_tank) ? (int) $r->setup_tank : 0,
+                    'attivita'                    => $attivita,
+                    'minuti'                      => (float) $r->minuti,
+                    'materiale'                   => isset($r->materiale) ? (float) $r->materiale : 0,
+                    'descrizione_materiale'       => $r->descrizione_materiale ?? null,
                     'id_lavorazione_origine'      => $id_lav,
                     'id_lavorazione_riga_origine' => $r->id,
                 ]);

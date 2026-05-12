@@ -119,10 +119,27 @@
                                 @foreach($righe as $riga)
                                     <tr data-id="{{$riga->id}}">
                                         <td class="text-center riga-drag-handle" style="cursor:grab; width:32px;" title="Trascina per riordinare"><i class="ri-drag-move-2-line text-muted"></i></td>
-                                        <td class="fw-medium">{{$riga->nome_prodotto}}</td>
-                                        <td>{{$riga->dettagli_prodotto}}</td>
+                                        <td class="fw-medium">
+                                            @if(!empty($riga->servizio))<span class="badge bg-soft-info text-info me-1">{{ $riga->servizio }}</span>@endif
+                                            {{ $riga->nome_prodotto ?: $riga->descrizione }}
+                                            @if(!empty($riga->setup_tank))<span class="badge bg-soft-warning text-warning ms-1" title="Setup Task">Setup</span>@endif
+                                        </td>
+                                        <td>
+                                            {{$riga->dettagli_prodotto}}
+                                            @if(!empty($riga->materiale) && $riga->materiale > 0)
+                                                <br><small class="text-muted">Materiale: € {{ number_format($riga->materiale,2,',','.') }}@if(!empty($riga->descrizione_materiale)) — {{ $riga->descrizione_materiale }}@endif</small>
+                                            @endif
+                                        </td>
                                         <td>{{$riga->lotto}}</td>
-                                        <td>{{$riga->qta}} {{$riga->um}}</td>
+                                        <td>
+                                            {{$riga->qta}} {{$riga->um}}
+                                            @if(!empty($riga->minuti) && $riga->minuti > 0)
+                                                <br><small class="text-muted">{{ rtrim(rtrim(number_format($riga->minuti,2,',',''), '0'), ',') }} min</small>
+                                            @endif
+                                            @if(!empty($riga->attivita) && (float)$riga->attivita != 1.0)
+                                                <br><small class="text-muted">att: {{ rtrim(rtrim(number_format($riga->attivita,2,',',''), '0'), ',') }}</small>
+                                            @endif
+                                        </td>
                                         <td>€ {{number_format($riga->prezzo_unitario, 2, ',', '.')}}</td>
                                         <td>{{$riga->iva}}%</td>
                                         <td class="text-end">€ {{number_format($riga->prezzo_totale, 2, ',', '.')}}</td>

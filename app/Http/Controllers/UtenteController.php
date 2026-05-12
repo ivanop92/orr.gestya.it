@@ -4146,6 +4146,18 @@ ORDER BY s.data_scadenza ASC',
         $clienti = DB::table('clienti')->where('id_tipologia', 2)->where('id_azienda', $utente->id_azienda)->get();
         $fornitori = DB::table('fornitori')->where('id_azienda', $utente->id_azienda)->get();  // AGGIUNGI QUESTA
 
+        // Dati per il flusso manutenzione (gated lato view dai flag aziendali)
+        $vagoni = DB::table('vagoni')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('attivo', 1)
+            ->orderBy('codice')
+            ->get();
+        $lavorazioni_disponibili = DB::table('lavorazioni')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('attivo', 1)
+            ->orderBy('descrizione')
+            ->get();
+
         // Carica i dati degli agenti associati ai clienti
         $clienti_agenti = DB::table('clienti')
             ->where('id_azienda', $utente->id_azienda)
@@ -4164,7 +4176,7 @@ ORDER BY s.data_scadenza ASC',
 
             /*evita l'inserimento di queste cose*/
             $datiDotes = array_filter($dati, function($key) {
-                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows';
+                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows' && $key !== 'lavorazioni_applicate';
             }, ARRAY_FILTER_USE_KEY);
 
             $datiDotes['da_registrare'] = 0;
@@ -4173,7 +4185,23 @@ ORDER BY s.data_scadenza ASC',
             $datiDotes['imponibile'] = (float)str_replace(['€', ' '], '', $datiDotes['imponibile']);
             $datiDotes['imposta'] = (float)str_replace(['€', ' '], '', $datiDotes['imposta']);
             $datiDotes['totale'] = (float)str_replace(['€', ' '], '', $datiDotes['totale']);
+
+            // Normalizza id_vagone (vuoto/0 -> null)
+            if (isset($datiDotes['id_vagone']) && ($datiDotes['id_vagone'] === '' || (int)$datiDotes['id_vagone'] === 0)) {
+                $datiDotes['id_vagone'] = null;
+            }
+
             $idDotes = DB::table('dotes')->insertGetId($datiDotes);
+
+            // Applica lavorazioni del catalogo (multi-select dal form manutenzione)
+            if (!empty($dati['lavorazioni_applicate']) && is_array($dati['lavorazioni_applicate'])) {
+                \App\Services\ApplicaLavorazione::applicaA(
+                    (int) $idDotes,
+                    (int) $utente->id_azienda,
+                    $dati['lavorazioni_applicate'],
+                    (int) $utente->id
+                );
+            }
 
             // Gestione dei prodotti
             if (isset($dati['products'])) {
@@ -4284,7 +4312,7 @@ ORDER BY s.data_scadenza ASC',
 
         if(sizeof($azienda) > 0) {
             $azienda = $azienda[0];
-            return View::make('utente.crea_documento', compact('utente', 'fornitori', 'azienda','agenti','clienti', 'cd_do', 'documento', 'scanBarcodeEnabled', 'prodotti_finiti', 'materie_prime', 'commerciali', 'numero_doc', 'modalita', 'clienti_agenti'));
+            return View::make('utente.crea_documento', compact('utente', 'fornitori', 'azienda','agenti','clienti', 'cd_do', 'documento', 'scanBarcodeEnabled', 'prodotti_finiti', 'materie_prime', 'commerciali', 'numero_doc', 'modalita', 'clienti_agenti', 'vagoni', 'lavorazioni_disponibili'));
         }
     }
 
@@ -5218,8 +5246,12 @@ ORDER BY s.data_scadenza ASC',
             'oggetto_interno' => $dotesOriginale->oggetto_interno,
             'data_consegna' => $dotesOriginale->data_consegna,
             'id_commessa' => $dotesOriginale->id_commessa,
-            // Manutenzione: copia il vagone e RESETTA il workflow accettazione (il duplicato riparte da zero)
+            // Manutenzione: preserva vagone + campi dominio, RESETTA il workflow accettazione
             'id_vagone'              => $dotesOriginale->id_vagone ?? null,
+            'automezzo'              => $dotesOriginale->automezzo ?? null,
+            'localita'               => $dotesOriginale->localita ?? null,
+            'reason_intake'          => $dotesOriginale->reason_intake ?? null,
+            'note_operatore'         => $dotesOriginale->note_operatore ?? null,
             'stato_accettazione'     => null,
             'motivo_rifiuto'         => null,
             'tentativi'              => 0,
@@ -5256,10 +5288,16 @@ ORDER BY s.data_scadenza ASC',
                 'iva' => $riga->iva,
                 // Preserva ordine righe (drag-drop)
                 'n_riga' => $riga->n_riga,
-                // Manutenzione: preserva legami a vagone e lavorazione di origine
+                // Manutenzione: preserva legami + campi dominio della riga di lavorazione
                 'id_vagone'                   => $riga->id_vagone ?? null,
                 'id_lavorazione_origine'      => $riga->id_lavorazione_origine ?? null,
                 'id_lavorazione_riga_origine' => $riga->id_lavorazione_riga_origine ?? null,
+                'servizio'                    => $riga->servizio ?? null,
+                'setup_tank'                  => isset($riga->setup_tank) ? (int) $riga->setup_tank : 0,
+                'attivita'                    => $riga->attivita ?? null,
+                'minuti'                      => $riga->minuti ?? null,
+                'materiale'                   => $riga->materiale ?? null,
+                'descrizione_materiale'       => $riga->descrizione_materiale ?? null,
             ];
             DB::table('dorig')->insert($nuovaRiga);
         }
