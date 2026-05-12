@@ -183,6 +183,26 @@
     </div>
 </div>
 
+<div id="import_loading_overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:99999; align-items:center; justify-content:center;">
+    <div class="card shadow-lg" style="max-width:540px;">
+        <div class="card-body text-center p-4">
+            <div class="spinner-border text-success mb-3" style="width:3.5rem; height:3.5rem;" role="status">
+                <span class="visually-hidden">Caricamento...</span>
+            </div>
+            <h5 class="mb-2"><i class="ri-upload-cloud-2-line me-1"></i>Importazione in corso...</h5>
+            <p class="text-muted mb-3">
+                Sto leggendo il CSV e inserendo le lavorazioni e le righe nel catalogo.<br>
+                <strong class="text-danger">Non chiudere né ricaricare questa finestra.</strong><br>
+                Per file con migliaia di righe può richiedere <strong>fino a 1–2 minuti</strong>.
+            </p>
+            <div class="progress" style="height:8px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width:100%"></div>
+            </div>
+            <p class="text-muted small mt-3 mb-0" id="import_loading_timer">Tempo trascorso: 0 s</p>
+        </div>
+    </div>
+</div>
+
 <script>
     $(document).ready(function() {
         if ($.fn.DataTable) {
@@ -190,6 +210,35 @@
                 language: { url: '//cdn.datatables.net/plug-ins/1.13.1/i18n/it-IT.json' },
                 pageLength: 25,
                 order: [[1, 'asc']]
+            });
+        }
+
+        // Loader overlay sull'import CSV
+        var importForm = document.querySelector('#modal_importa_csv_lavorazioni form');
+        if (importForm) {
+            importForm.addEventListener('submit', function(e) {
+                var fileInput = importForm.querySelector('input[type="file"]');
+                if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+
+                var overlay = document.getElementById('import_loading_overlay');
+                if (!overlay) return;
+                overlay.style.display = 'flex';
+
+                // Disabilita il bottone per evitare doppi submit
+                var submitBtn = importForm.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                // Timer secondi trascorsi
+                var startTime = Date.now();
+                var timerEl = document.getElementById('import_loading_timer');
+                setInterval(function() {
+                    var sec = Math.floor((Date.now() - startTime) / 1000);
+                    if (timerEl) {
+                        var mm = Math.floor(sec / 60);
+                        var ss = sec % 60;
+                        timerEl.textContent = 'Tempo trascorso: ' + (mm > 0 ? mm + ' min ' : '') + ss + ' s';
+                    }
+                }, 1000);
             });
         }
     });
