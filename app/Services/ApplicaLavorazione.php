@@ -53,6 +53,10 @@ class ApplicaLavorazione
                 $totale     = $imponibile + $imposta;
 
                 $isOrario = ((float) $r->minuti) > 0;
+                $attivita = isset($r->attivita) && (float) $r->attivita > 0 ? (float) $r->attivita : 1;
+                $qtaEffettiva = $isOrario
+                    ? round(((float) $r->minuti) / 60, 3)
+                    : round(((float) $r->qta) * $attivita, 3);
 
                 DB::table('dorig')->insert([
                     'id_azienda'                  => $id_azienda,
@@ -67,7 +71,7 @@ class ApplicaLavorazione
                     'cd_ar'                       => $r->codice,
                     'n_riga'                      => $maxNRiga,
                     'descrizione'                 => $r->descrizione,
-                    'qta'                         => $isOrario ? round(((float) $r->minuti) / 60, 3) : (float) $r->qta,
+                    'qta'                         => $qtaEffettiva,
                     'um'                          => $isOrario ? 'H' : 'PZ',
                     'pu'                          => (float) $r->pu,
                     'pt'                          => (float) $r->pt,

@@ -40,9 +40,14 @@
                                 <small class="text-muted">Macro di righe pre-confezionate da applicare a preventivi, certificati, ODL</small>
                             </div>
                             <div class="flex-shrink-0">
-                                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal_aggiungi_lavorazione">
-                                    <i class="ri-add-fill me-1 align-bottom"></i>Nuova Lavorazione
-                                </button>
+                                <div class="hstack gap-2">
+                                    <button class="btn btn-soft-success" data-bs-toggle="modal" data-bs-target="#modal_importa_csv_lavorazioni">
+                                        <i class="ri-upload-cloud-2-line me-1"></i>Importa CSV
+                                    </button>
+                                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal_aggiungi_lavorazione">
+                                        <i class="ri-add-fill me-1 align-bottom"></i>Nuova Lavorazione
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -130,6 +135,47 @@
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
                     <button type="submit" name="aggiungi" value="1" class="btn btn-success">
                         <i class="ri-save-line me-1"></i> Crea e Aggiungi Righe
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal_importa_csv_lavorazioni" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-soft-success p-3">
+                <h5 class="modal-title"><i class="ri-upload-cloud-2-line me-2"></i>Importa Lavorazioni da CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="/utente/lavorazioni/importa_csv" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <h6 class="alert-heading mb-2"><i class="ri-information-line me-1"></i>Formato richiesto</h6>
+                        <p class="mb-2">File CSV con queste colonne (header obbligatorio sulla prima riga). Separatore <code>;</code> o <code>,</code> (auto-rilevato). Encoding consigliato UTF-8.</p>
+                        <small class="d-block">
+                            <code>codice_lavorazione</code>, <code>descrizione_lavorazione</code>, <code>ordinamento</code>, <code>servizio</code>, <code>codice_riga</code>, <code>setup_tank</code>, <code>descrizione_riga</code>, <code>attivita</code>, <code>qta</code>, <code>minuti</code>, <code>pu</code>, <code>aliquota</code>, <code>materiale</code>, <code>descrizione_materiale</code>
+                        </small>
+                    </div>
+                    <div class="alert alert-light small mb-3">
+                        <strong>Note:</strong>
+                        <ul class="mb-0">
+                            <li>Una riga del CSV = una riga della lavorazione. Le righe con lo stesso <code>codice_lavorazione</code> vengono raggruppate sotto la stessa testata.</li>
+                            <li>Le lavorazioni con <strong>codice già presente</strong> nel catalogo vengono <strong>ignorate</strong> (non sovrascritte). Per re-importarle elimina prima la lavorazione esistente.</li>
+                            <li>Decimali: usa il punto (37.50) o la virgola (37,50), entrambi accettati.</li>
+                            <li>Default: <code>attivita=1</code>, <code>aliquota=22</code> se vuoti. <code>setup_tank</code> = 1/true/yes/si.</li>
+                        </ul>
+                    </div>
+
+                    <label class="form-label">File CSV <b style="color:red">*</b></label>
+                    <input type="file" name="csv" class="form-control" accept=".csv,text/csv" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="ri-upload-cloud-2-line me-1"></i> Carica e Importa
                     </button>
                 </div>
             </form>

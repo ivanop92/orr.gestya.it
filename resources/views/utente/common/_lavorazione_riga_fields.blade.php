@@ -10,7 +10,8 @@
     </div>
     <div class="col-md-3">
         <label class="form-label">Attività</label>
-        <input type="text" name="attivita" id="{{ $p }}attivita" class="form-control" placeholder="attività">
+        <input type="number" name="attivita" id="{{ $p }}attivita" class="form-control" step="0.01" min="0" value="1">
+        <small class="text-muted">Moltiplicatore (default 1)</small>
     </div>
     <div class="col-md-2">
         <label class="form-label">&nbsp;</label>

@@ -36,6 +36,7 @@ Route::any('utente/vagoni',array('uses'=>'UtenteController@vagoni'));
 Route::any('utente/dettaglio_vagone/{id}',array('uses'=>'UtenteController@dettaglio_vagone'));
 Route::post('utente/documento_workflow/{id_dotes}/{azione}',array('uses'=>'UtenteController@documento_workflow'));
 Route::any('utente/lavorazioni',array('uses'=>'UtenteController@lavorazioni'));
+Route::post('utente/lavorazioni/importa_csv',array('uses'=>'UtenteController@importa_lavorazioni_csv'));
 Route::any('utente/dettaglio_lavorazione/{id}',array('uses'=>'UtenteController@dettaglio_lavorazione'));
 Route::post('utente/ajax/ordina_righe_lavorazione/{id_lavorazione}',array('uses'=>'UtenteController@ordina_righe_lavorazione'));
 Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));

@@ -11372,6 +11372,151 @@ ORDER BY s.data_scadenza ASC',
         return View::make('utente.dettaglio_lavorazione', compact('utente', 'lavorazione', 'righe', 'page'));
     }
 
+    public function importa_lavorazioni_csv(Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+
+        if (!$request->hasFile('csv')) {
+            return Redirect::to('utente/lavorazioni')->with('error', 'Nessun file caricato');
+        }
+
+        $file = $request->file('csv');
+        if (!$file->isValid()) {
+            return Redirect::to('utente/lavorazioni')->with('error', 'File non valido');
+        }
+
+        $path = $file->getRealPath();
+        if (($handle = fopen($path, 'r')) === false) {
+            return Redirect::to('utente/lavorazioni')->with('error', 'Impossibile leggere il file');
+        }
+
+        // Auto-detect separator (; o ,)
+        $firstLine = fgets($handle);
+        if ($firstLine === false) {
+            fclose($handle);
+            return Redirect::to('utente/lavorazioni')->with('error', 'File vuoto');
+        }
+        if (substr($firstLine, 0, 3) === "\xEF\xBB\xBF") {
+            $firstLine = substr($firstLine, 3);
+        }
+        $separator = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
+        rewind($handle);
+
+        $header = fgetcsv($handle, 0, $separator);
+        if (!$header) {
+            fclose($handle);
+            return Redirect::to('utente/lavorazioni')->with('error', 'Header CSV mancante');
+        }
+        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]);
+        $header = array_map(function ($h) { return strtolower(trim($h)); }, $header);
+
+        $valOrNull = function ($v) { return ($v === null || $v === '') ? null : $v; };
+
+        $lavorazioniMap = [];
+        $lavSkip = 0;
+        $lavCreate = 0;
+        $righeCreate = 0;
+        $now = date('Y-m-d H:i:s');
+
+        while (($row = fgetcsv($handle, 0, $separator)) !== false) {
+            if (count(array_filter($row, function ($v) { return $v !== '' && $v !== null; })) === 0) {
+                continue;
+            }
+            $row = array_pad(array_slice($row, 0, count($header)), count($header), '');
+            $r = array_combine($header, $row);
+
+            $codice      = trim($r['codice_lavorazione'] ?? '');
+            $descrizione = trim($r['descrizione_lavorazione'] ?? '');
+            if ($codice === '' || $descrizione === '') continue;
+
+            if (!array_key_exists($codice, $lavorazioniMap)) {
+                $esistente = DB::table('lavorazioni')
+                    ->where('id_azienda', $utente->id_azienda)
+                    ->where('codice', $codice)
+                    ->first();
+
+                if ($esistente) {
+                    $lavSkip++;
+                    $lavorazioniMap[$codice] = -1;
+                    continue;
+                }
+
+                $newId = DB::table('lavorazioni')->insertGetId([
+                    'id_azienda'  => $utente->id_azienda,
+                    'codice'      => $codice,
+                    'descrizione' => $descrizione,
+                    'totale'      => 0,
+                    'attivo'      => 1,
+                    'id_utente'   => $utente->id,
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ]);
+                $lavorazioniMap[$codice] = $newId;
+                $lavCreate++;
+            }
+
+            $idLav = $lavorazioniMap[$codice];
+            if ($idLav === -1) continue;
+
+            $qta       = (float) str_replace(',', '.', $r['qta'] ?? 0);
+            $minuti    = (float) str_replace(',', '.', $r['minuti'] ?? 0);
+            $pu        = (float) str_replace(',', '.', $r['pu'] ?? 0);
+            $aliquota  = (int)   ($r['aliquota'] ?? 22);
+            $materiale = (float) str_replace(',', '.', $r['materiale'] ?? 0);
+            $attivitaVal = (float) str_replace(',', '.', $r['attivita'] ?? 1);
+            $attivita    = $attivitaVal > 0 ? $attivitaVal : 1;
+
+            if ($minuti > 0) {
+                $pt = round($pu * $minuti / 60, 2);
+            } else {
+                $pt = round($pu * $attivita * $qta, 2);
+            }
+            $imposta = round($pt * $aliquota / 100, 2);
+
+            $setupRaw = strtolower(trim($r['setup_tank'] ?? ''));
+            $setup    = in_array($setupRaw, ['1', 'true', 'yes', 'si', 'sì'], true) ? 1 : 0;
+
+            DB::table('lavorazioni_righe')->insert([
+                'id_azienda'            => $utente->id_azienda,
+                'id_lavorazione'        => $idLav,
+                'ordinamento'           => (int) ($r['ordinamento'] ?? 0),
+                'servizio'              => $valOrNull($r['servizio'] ?? null),
+                'codice'                => $valOrNull($r['codice_riga'] ?? null),
+                'setup_tank'            => $setup,
+                'descrizione'           => $valOrNull($r['descrizione_riga'] ?? null),
+                'attivita'              => $attivita,
+                'qta'                   => $qta,
+                'minuti'                => $minuti,
+                'pu'                    => $pu,
+                'aliquota'              => $aliquota,
+                'imposta'               => $imposta,
+                'imponibile'            => $pt,
+                'pt'                    => $pt,
+                'materiale'             => $materiale,
+                'descrizione_materiale' => $valOrNull($r['descrizione_materiale'] ?? null),
+                'id_utente'             => $utente->id,
+                'created_at'            => $now,
+                'updated_at'            => $now,
+            ]);
+            $righeCreate++;
+        }
+
+        fclose($handle);
+
+        foreach ($lavorazioniMap as $codice => $idLav) {
+            if ($idLav !== -1) {
+                $this->ricalcola_totale_lavorazione((int) $idLav, (int) $utente->id_azienda);
+            }
+        }
+
+        $msg = sprintf(
+            'Import completato: %d lavorazioni nuove con %d righe. %d lavorazioni già presenti nel catalogo sono state ignorate.',
+            $lavCreate, $righeCreate, $lavSkip
+        );
+        return Redirect::to('utente/lavorazioni')->with('success', $msg);
+    }
+
     public function ordina_righe_lavorazione($id_lavorazione, Request $request)
     {
         $this->is_loggato();
@@ -11400,7 +11545,7 @@ ORDER BY s.data_scadenza ASC',
             'codice'                => isset($dati['codice']) && $dati['codice'] !== '' ? $dati['codice'] : null,
             'setup_tank'            => isset($dati['setup_tank']) ? 1 : 0,
             'descrizione'           => $dati['descrizione'] ?? null,
-            'attivita'              => isset($dati['attivita']) && $dati['attivita'] !== '' ? $dati['attivita'] : null,
+            'attivita'              => $this->parse_decimal($dati['attivita'] ?? 1),
             'qta'                   => $this->parse_decimal($dati['qta'] ?? 0),
             'minuti'                => $this->parse_decimal($dati['minuti'] ?? 0),
             'pu'                    => $this->parse_decimal($dati['pu'] ?? 0),
@@ -11409,10 +11554,16 @@ ORDER BY s.data_scadenza ASC',
             'descrizione_materiale' => isset($dati['descrizione_materiale']) && $dati['descrizione_materiale'] !== '' ? $dati['descrizione_materiale'] : null,
         ];
 
+        // attivita = moltiplicatore (default 1 se mancante o 0)
+        $attivita = $out['attivita'] > 0 ? $out['attivita'] : 1;
+
+        // Logica calcolo allineata al vecchio sw ORR:
+        //   se minuti > 0  ->  pt = pu * minuti / 60
+        //   altrimenti      ->  pt = pu * attivita * qta
         if ($out['minuti'] > 0) {
             $out['pt'] = round($out['pu'] * $out['minuti'] / 60, 2);
         } else {
-            $out['pt'] = round($out['pu'] * $out['qta'], 2);
+            $out['pt'] = round($out['pu'] * $attivita * $out['qta'], 2);
         }
         $out['imponibile'] = $out['pt'];
         $out['imposta']    = round($out['pt'] * $out['aliquota'] / 100, 2);
