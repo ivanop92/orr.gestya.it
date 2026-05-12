@@ -4176,7 +4176,7 @@ ORDER BY s.data_scadenza ASC',
 
             /*evita l'inserimento di queste cose*/
             $datiDotes = array_filter($dati, function($key) {
-                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows' && $key !== 'lavorazioni_applicate';
+                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows' && $key !== 'lavorazioni_applicate' && $key !== 'righe_lavorazione';
             }, ARRAY_FILTER_USE_KEY);
 
             $datiDotes['da_registrare'] = 0;
@@ -4193,7 +4193,7 @@ ORDER BY s.data_scadenza ASC',
 
             $idDotes = DB::table('dotes')->insertGetId($datiDotes);
 
-            // Applica lavorazioni del catalogo (multi-select dal form manutenzione)
+            // Applica lavorazioni del catalogo (multi-select dal form manutenzione - legacy)
             if (!empty($dati['lavorazioni_applicate']) && is_array($dati['lavorazioni_applicate'])) {
                 \App\Services\ApplicaLavorazione::applicaA(
                     (int) $idDotes,
@@ -4201,6 +4201,69 @@ ORDER BY s.data_scadenza ASC',
                     $dati['lavorazioni_applicate'],
                     (int) $utente->id
                 );
+            }
+
+            // Inserisci righe lavorazione direttamente dal form manutenzione (nuova UI)
+            if (!empty($dati['righe_lavorazione']) && is_array($dati['righe_lavorazione'])) {
+                $nRiga = 0;
+                foreach ($dati['righe_lavorazione'] as $rl) {
+                    if (!is_array($rl)) continue;
+                    $descr = trim($rl['descrizione'] ?? '');
+                    $codiceR = trim($rl['codice'] ?? '');
+                    if ($descr === '' && $codiceR === '') continue; // skippa righe completamente vuote
+
+                    $nRiga++;
+                    $qta       = (float) str_replace(',', '.', $rl['qta'] ?? 0);
+                    $minuti    = (float) str_replace(',', '.', $rl['minuti'] ?? 0);
+                    $pu        = (float) str_replace(',', '.', $rl['pu'] ?? 0);
+                    $attRaw    = (float) str_replace(',', '.', $rl['attivita'] ?? 1);
+                    $att       = $attRaw > 0 ? $attRaw : 1;
+                    $aliquota  = (int)   ($rl['aliquota'] ?? 22);
+                    $materiale = (float) str_replace(',', '.', $rl['materiale'] ?? 0);
+
+                    if ($minuti > 0) {
+                        $pt = round($pu * $minuti / 60, 2);
+                    } else {
+                        $pt = round($pu * $att * $qta, 2);
+                    }
+                    $imposta = round($pt * $aliquota / 100, 2);
+                    $totale  = $pt + $imposta;
+                    $isOrario = $minuti > 0;
+
+                    DB::table('dorig')->insert([
+                        'id_azienda'            => $utente->id_azienda,
+                        'id_utente'             => $utente->id,
+                        'id_cliente'            => $datiDotes['id_cliente'] ?? null,
+                        'id_dotes'              => $idDotes,
+                        'id_testata'            => $idDotes,
+                        'cd_do'                 => $cd_do,
+                        'numero_doc'            => $datiDotes['numero_doc'] ?? null,
+                        'data_doc'              => $datiDotes['data_doc'] ?? null,
+                        'cd_ar'                 => $codiceR !== '' ? $codiceR : null,
+                        'n_riga'                => $nRiga,
+                        'descrizione'           => $descr !== '' ? $descr : null,
+                        'qta'                   => $isOrario ? round($minuti / 60, 3) : round($qta * $att, 3),
+                        'um'                    => $isOrario ? 'H' : 'PZ',
+                        'pu'                    => $pu,
+                        'pt'                    => $pt,
+                        'prezzo_unitario'       => $pu,
+                        'prezzo_totale'         => $pt,
+                        'prezzo_totale_iva'     => $totale,
+                        'iva'                   => $aliquota,
+                        'imponibile'            => $pt,
+                        'imposta'               => $imposta,
+                        'totale'                => $totale,
+                        'servizio'              => trim($rl['servizio'] ?? '') !== '' ? $rl['servizio'] : null,
+                        'setup_tank'            => isset($rl['setup_tank']) && (int) $rl['setup_tank'] === 1 ? 1 : 0,
+                        'attivita'              => $att,
+                        'minuti'                => $minuti,
+                        'materiale'             => $materiale,
+                        'descrizione_materiale' => trim($rl['descrizione_materiale'] ?? '') !== '' ? $rl['descrizione_materiale'] : null,
+                    ]);
+                }
+
+                // Ricalcola aggregati testata dalla somma delle righe effettivamente inserite
+                \App\Services\ApplicaLavorazione::ricalcolaAggregatiDotes((int) $idDotes, (int) $utente->id_azienda);
             }
 
             // Gestione dei prodotti
@@ -4312,6 +4375,11 @@ ORDER BY s.data_scadenza ASC',
 
         if(sizeof($azienda) > 0) {
             $azienda = $azienda[0];
+            // Branch: per il flusso manutenzione (PRE/ORD con flag azienda attivo) usa la view dedicata
+            if (!empty($azienda->manut_workflow_accettazione_multistep) && in_array($cd_do, ['PRE', 'ORD'])) {
+                return View::make('utente.crea_documento_manutenzione', compact('utente', 'fornitori', 'azienda','agenti','clienti', 'cd_do', 'documento', 'scanBarcodeEnabled', 'prodotti_finiti', 'materie_prime', 'commerciali', 'numero_doc', 'modalita', 'clienti_agenti', 'vagoni', 'lavorazioni_disponibili'));
+            }
+
             return View::make('utente.crea_documento', compact('utente', 'fornitori', 'azienda','agenti','clienti', 'cd_do', 'documento', 'scanBarcodeEnabled', 'prodotti_finiti', 'materie_prime', 'commerciali', 'numero_doc', 'modalita', 'clienti_agenti', 'vagoni', 'lavorazioni_disponibili'));
         }
     }
