@@ -11287,13 +11287,24 @@ ORDER BY s.data_scadenza ASC',
             return Redirect::to('utente/lavorazioni')->with('success', 'Lavorazione eliminata');
         }
 
-        $lavorazioni = DB::table('lavorazioni')
-            ->where('id_azienda', $utente->id_azienda)
+        $q = trim((string) $request->input('q', ''));
+
+        $query = DB::table('lavorazioni')->where('id_azienda', $utente->id_azienda);
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('codice', 'like', '%'.$q.'%')
+                  ->orWhere('descrizione', 'like', '%'.$q.'%');
+            });
+        }
+
+        $lavorazioni = $query
             ->orderBy('descrizione')
-            ->get();
+            ->paginate(50)
+            ->appends($request->query());
 
         $page = 'lavorazioni';
-        return View::make('utente.lavorazioni', compact('utente', 'lavorazioni', 'page'));
+        return View::make('utente.lavorazioni', compact('utente', 'lavorazioni', 'page', 'q'));
     }
 
     public function dettaglio_lavorazione($id, Request $request)

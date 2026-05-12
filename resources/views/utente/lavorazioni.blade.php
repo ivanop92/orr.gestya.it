@@ -52,7 +52,32 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        <table id="lavorazioni-datatable" class="table table-bordered dt-responsive nowrap table-striped align-middle" style="width:100%">
+
+                        <form method="get" class="mb-3">
+                            <div class="row g-2 align-items-center">
+                                <div class="col-sm-6 col-md-5">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" name="q" value="{{ $q ?? '' }}" class="form-control" placeholder="Cerca per codice o descrizione...">
+                                        <button type="submit" class="btn btn-soft-primary">
+                                            <i class="ri-search-line"></i>
+                                        </button>
+                                        @if(!empty($q))
+                                            <a href="/utente/lavorazioni" class="btn btn-light">Annulla</a>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 col-md-7 text-md-end">
+                                    <small class="text-muted">
+                                        <strong>{{ $lavorazioni->total() }}</strong> lavorazioni totali
+                                        @if($lavorazioni->total() > 0)
+                                            · Pagina {{ $lavorazioni->currentPage() }} di {{ max($lavorazioni->lastPage(), 1) }}
+                                        @endif
+                                    </small>
+                                </div>
+                            </div>
+                        </form>
+
+                        <table class="table table-bordered nowrap table-striped align-middle mb-0" style="width:100%">
                             <thead>
                             <tr>
                                 <th>Codice</th>
@@ -100,8 +125,27 @@
                                     </td>
                                 </tr>
                             @endforeach
+                            @if($lavorazioni->total() === 0)
+                                <tr><td colspan="5" class="text-center text-muted py-4">
+                                    @if(!empty($q))
+                                        Nessuna lavorazione trovata per "<strong>{{ $q }}</strong>". <a href="/utente/lavorazioni">Annulla ricerca</a>.
+                                    @else
+                                        Nessuna lavorazione nel catalogo. Crea la prima con "Nuova Lavorazione" o importa il CSV.
+                                    @endif
+                                </td></tr>
+                            @endif
                             </tbody>
                         </table>
+
+                        @if($lavorazioni->hasPages())
+                            <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                                <small class="text-muted">
+                                    Mostra <strong>{{ $lavorazioni->firstItem() }}</strong>–<strong>{{ $lavorazioni->lastItem() }}</strong> di <strong>{{ $lavorazioni->total() }}</strong>
+                                </small>
+                                {!! $lavorazioni->links('utente.common._pagination') !!}
+                            </div>
+                        @endif
+
                     </div>
                 </div>
             </div>
@@ -205,14 +249,6 @@
 
 <script>
     $(document).ready(function() {
-        if ($.fn.DataTable) {
-            $('#lavorazioni-datatable').DataTable({
-                language: { url: '//cdn.datatables.net/plug-ins/1.13.1/i18n/it-IT.json' },
-                pageLength: 25,
-                order: [[1, 'asc']]
-            });
-        }
-
         // Loader overlay sull'import CSV
         var importForm = document.querySelector('#modal_importa_csv_lavorazioni form');
         if (importForm) {
