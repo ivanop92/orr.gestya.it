@@ -2,28 +2,6 @@
 
 @php
     $tariffa_default = (float) ($azienda->manut_tariffa_oraria_default ?? 33.75);
-
-    // UNA SOLA query JOIN per tutte le righe del catalogo, raggruppate per lavorazione (no N+1)
-    $lavorazioni_payload = [];
-    if (isset($lavorazioni_disponibili) && count($lavorazioni_disponibili) > 0) {
-        $idsLav = collect($lavorazioni_disponibili)->pluck('id')->toArray();
-        $righe_raw = DB::table('lavorazioni_righe')
-            ->whereIn('id_lavorazione', $idsLav)
-            ->where('id_azienda', $utente->id_azienda)
-            ->orderBy('id_lavorazione')
-            ->orderBy('ordinamento')
-            ->get()
-            ->groupBy('id_lavorazione');
-        foreach ($lavorazioni_disponibili as $lav) {
-            $lavorazioni_payload[] = [
-                'id'          => $lav->id,
-                'codice'      => $lav->codice,
-                'descrizione' => $lav->descrizione,
-                'totale'      => $lav->totale,
-                'righe'       => $righe_raw->get($lav->id, collect()),
-            ];
-        }
-    }
 @endphp
 
 <div class="page-content">
@@ -250,42 +228,11 @@
                             <th class="text-end" style="width:100px;">Totale</th>
                         </tr>
                         </thead>
-                        <tbody>
-                            @foreach($lavorazioni_payload as $lav)
-                                <tr class="table-secondary lav-macro-header" data-lav-id="{{ $lav['id'] }}" data-search="{{ strtolower($lav['codice'].' '.$lav['descrizione']) }}">
-                                    <td><input type="checkbox" class="form-check-input lav-macro-checkall" data-lav-id="{{ $lav['id'] }}" title="Spunta tutte le righe di questa macro"></td>
-                                    <td colspan="7">
-                                        <strong>{{ $lav['codice'] }}</strong> — {{ $lav['descrizione'] }}
-                                        <small class="text-muted">({{ count($lav['righe']) }} righe · totale macro € {{ number_format($lav['totale'],2,',','.') }})</small>
-                                    </td>
-                                </tr>
-                                @foreach($lav['righe'] as $r)
-                                    <tr class="lav-riga-row" data-lav-id="{{ $lav['id'] }}" data-search="{{ strtolower(($r->servizio?:'').' '.($r->codice?:'').' '.($r->descrizione?:'').' '.$lav['codice'].' '.$lav['descrizione']) }}">
-                                        <td>
-                                            <input type="checkbox" class="form-check-input lav-riga-check"
-                                                data-lav-id="{{ $lav['id'] }}"
-                                                data-servizio="{{ $r->servizio }}"
-                                                data-codice="{{ $r->codice }}"
-                                                data-descrizione="{{ $r->descrizione }}"
-                                                data-attivita="{{ $r->attivita }}"
-                                                data-qta="{{ $r->qta }}"
-                                                data-minuti="{{ $r->minuti }}"
-                                                data-pu="{{ $r->pu }}"
-                                                data-aliquota="{{ $r->aliquota }}"
-                                                data-materiale="{{ $r->materiale }}"
-                                                data-descrizione_materiale="{{ $r->descrizione_materiale }}"
-                                                data-setup_tank="{{ $r->setup_tank }}">
-                                        </td>
-                                        <td>{{ $r->servizio }}</td>
-                                        <td>{{ $r->codice }}</td>
-                                        <td>{{ $r->descrizione }}</td>
-                                        <td class="text-end">{{ rtrim(rtrim(number_format($r->qta,3,',','.'),'0'),',') ?: '0' }}</td>
-                                        <td class="text-end">{{ rtrim(rtrim(number_format($r->minuti,2,',','.'),'0'),',') ?: '0' }}</td>
-                                        <td class="text-end">€ {{ number_format($r->pu,2,',','.') }}</td>
-                                        <td class="text-end">€ {{ number_format($r->pt,2,',','.') }}</td>
-                                    </tr>
-                                @endforeach
-                            @endforeach
+                        <tbody id="modal_lav_tbody">
+                            <tr><td colspan="8" class="text-center text-muted py-4">
+                                <div class="spinner-border text-success" role="status"></div>
+                                <div class="mt-2">Caricamento catalogo…</div>
+                            </td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -437,26 +384,98 @@
         document.getElementById('sdi_hidden').value  = opt.dataset.sdi  || '';
     });
 
-    // Filtro live nella modale, debounced per non rilanciare a ogni keystroke su dataset enormi
+    // Lazy load del catalogo righe al primo open della modale (per evitare DOM enorme al pageload)
+    var _modCatLoaded = false;
+    function _escHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    function _fmtNum(n, dec) {
+        var num = parseFloat(n) || 0;
+        if (num === 0) return '0';
+        var s = num.toFixed(dec);
+        s = s.replace(/0+$/, '').replace(/\.$/, '');
+        return s.replace('.', ',');
+    }
+    function _fmtEur(n) {
+        return (parseFloat(n) || 0).toFixed(2).replace('.', ',');
+    }
+    function caricaCatalogoLavorazioni() {
+        if (_modCatLoaded) return;
+        _modCatLoaded = true;
+        var tbody = document.getElementById('modal_lav_tbody');
+        fetch('/utente/ajax/catalogo_lavorazioni_righe', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(data) {
+                var lavs = data.lavorazioni || [];
+                if (lavs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Catalogo lavorazioni vuoto. Crealo da Produzione → Catalogo Lavorazioni.</td></tr>';
+                    return;
+                }
+                var parts = [];
+                for (var i = 0; i < lavs.length; i++) {
+                    var lav = lavs[i];
+                    var righe = lav.righe || [];
+                    var macroSearch = (_escHtml((lav.codice || '') + ' ' + (lav.descrizione || ''))).toLowerCase();
+                    parts.push(
+                        '<tr class="table-secondary lav-macro-header" data-lav-id="'+lav.id+'" data-search="'+macroSearch+'">' +
+                        '<td><input type="checkbox" class="form-check-input lav-macro-checkall" data-lav-id="'+lav.id+'" title="Spunta tutte"></td>' +
+                        '<td colspan="7"><strong>'+_escHtml(lav.codice)+'</strong> — '+_escHtml(lav.descrizione)+
+                        ' <small class="text-muted">('+righe.length+' righe · totale macro € '+_fmtEur(lav.totale)+')</small></td>' +
+                        '</tr>'
+                    );
+                    for (var j = 0; j < righe.length; j++) {
+                        var r = righe[j];
+                        var search = (((r.servizio||'')+' '+(r.codice||'')+' '+(r.descrizione||'')+' '+(lav.codice||'')+' '+(lav.descrizione||''))).toLowerCase();
+                        parts.push(
+                            '<tr class="lav-riga-row" data-lav-id="'+lav.id+'" data-search="'+_escHtml(search)+'">' +
+                            '<td><input type="checkbox" class="form-check-input lav-riga-check"' +
+                            ' data-lav-id="'+lav.id+'"' +
+                            ' data-servizio="'+_escHtml(r.servizio)+'"' +
+                            ' data-codice="'+_escHtml(r.codice)+'"' +
+                            ' data-descrizione="'+_escHtml(r.descrizione)+'"' +
+                            ' data-attivita="'+(r.attivita||1)+'"' +
+                            ' data-qta="'+(r.qta||0)+'"' +
+                            ' data-minuti="'+(r.minuti||0)+'"' +
+                            ' data-pu="'+(r.pu||0)+'"' +
+                            ' data-aliquota="'+(r.aliquota||22)+'"' +
+                            ' data-materiale="'+(r.materiale||0)+'"' +
+                            ' data-descrizione_materiale="'+_escHtml(r.descrizione_materiale)+'"' +
+                            ' data-setup_tank="'+(r.setup_tank?'1':'0')+'"></td>' +
+                            '<td>'+_escHtml(r.servizio)+'</td>' +
+                            '<td>'+_escHtml(r.codice)+'</td>' +
+                            '<td>'+_escHtml(r.descrizione)+'</td>' +
+                            '<td class="text-end">'+_fmtNum(r.qta, 3)+'</td>' +
+                            '<td class="text-end">'+_fmtNum(r.minuti, 2)+'</td>' +
+                            '<td class="text-end">€ '+_fmtEur(r.pu)+'</td>' +
+                            '<td class="text-end">€ '+_fmtEur(r.pt)+'</td>' +
+                            '</tr>'
+                        );
+                    }
+                }
+                tbody.innerHTML = parts.join('');
+            })
+            .catch(function(err) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-3">Errore caricamento catalogo: '+err+'</td></tr>';
+                _modCatLoaded = false; // permetti retry
+            });
+    }
+    var _modalElLav = document.getElementById('modal_applica_lav_form');
+    if (_modalElLav) {
+        _modalElLav.addEventListener('show.bs.modal', caricaCatalogoLavorazioni);
+    }
+
+    // Filtro live nella modale, debounced. Riquery del DOM ogni volta perche' le righe sono iniettate via AJAX
     (function() {
         var debounceTimer = null;
-        var righeCache = null, headersCache = null;
-        function getRighe() {
-            if (!righeCache) righeCache = document.querySelectorAll('.lav-riga-row');
-            return righeCache;
-        }
-        function getHeaders() {
-            if (!headersCache) headersCache = document.querySelectorAll('.lav-macro-header');
-            return headersCache;
-        }
         function applicaFiltro(q) {
             var matchByMacro = {};
-            getRighe().forEach(function(row) {
+            document.querySelectorAll('.lav-riga-row').forEach(function(row) {
                 var match = (q === '' || row.dataset.search.indexOf(q) !== -1);
                 row.style.display = match ? '' : 'none';
                 if (match) matchByMacro[row.dataset.lavId] = true;
             });
-            getHeaders().forEach(function(h) {
+            document.querySelectorAll('.lav-macro-header').forEach(function(h) {
                 var idLav = h.dataset.lavId;
                 var macroMatchesText = (q === '' || h.dataset.search.indexOf(q) !== -1);
                 h.style.display = (matchByMacro[idLav] || macroMatchesText) ? '' : 'none';

@@ -39,6 +39,7 @@ Route::any('utente/lavorazioni',array('uses'=>'UtenteController@lavorazioni'));
 Route::post('utente/lavorazioni/importa_csv',array('uses'=>'UtenteController@importa_lavorazioni_csv'));
 Route::any('utente/dettaglio_lavorazione/{id}',array('uses'=>'UtenteController@dettaglio_lavorazione'));
 Route::post('utente/ajax/ordina_righe_lavorazione/{id_lavorazione}',array('uses'=>'UtenteController@ordina_righe_lavorazione'));
+Route::get('utente/ajax/catalogo_lavorazioni_righe',array('uses'=>'UtenteController@ajax_catalogo_lavorazioni_righe'));
 Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));
 Route::post('utente/ajax/ordina_righe_documento/{id_dotes}',array('uses'=>'UtenteController@ordina_righe_documento'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));

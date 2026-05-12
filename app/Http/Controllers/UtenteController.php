@@ -11682,6 +11682,43 @@ ORDER BY s.data_scadenza ASC',
         return Redirect::to('utente/lavorazioni')->with('success', $msg);
     }
 
+    public function ajax_catalogo_lavorazioni_righe(Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+
+        $lavorazioni = DB::table('lavorazioni')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('attivo', 1)
+            ->orderBy('descrizione')
+            ->get();
+
+        if (count($lavorazioni) === 0) {
+            return response()->json(['lavorazioni' => []]);
+        }
+
+        $idsLav = $lavorazioni->pluck('id')->toArray();
+        $righe = DB::table('lavorazioni_righe')
+            ->whereIn('id_lavorazione', $idsLav)
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('id_lavorazione')
+            ->orderBy('ordinamento')
+            ->get()
+            ->groupBy('id_lavorazione');
+
+        $out = [];
+        foreach ($lavorazioni as $lav) {
+            $out[] = [
+                'id'          => $lav->id,
+                'codice'      => $lav->codice,
+                'descrizione' => $lav->descrizione,
+                'totale'      => (float) $lav->totale,
+                'righe'       => $righe->get($lav->id, collect())->values(),
+            ];
+        }
+        return response()->json(['lavorazioni' => $out]);
+    }
+
     public function ordina_righe_lavorazione($id_lavorazione, Request $request)
     {
         $this->is_loggato();
