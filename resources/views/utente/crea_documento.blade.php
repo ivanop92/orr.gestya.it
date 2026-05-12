@@ -1215,13 +1215,21 @@
                                                 @if($modalita == 'crea' && isset($lavorazioni_disponibili) && count($lavorazioni_disponibili) > 0)
                                                     <div class="col-md-12">
                                                         <hr>
-                                                        <label class="form-label"><strong>Applica lavorazioni dal catalogo</strong></label>
-                                                        <p class="text-muted small mb-2">Le righe delle lavorazioni selezionate verranno aggiunte automaticamente al documento al salvataggio.</p>
+                                                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                                            <label class="form-label mb-0"><strong>Applica lavorazioni dal catalogo</strong></label>
+                                                            <span class="badge bg-soft-success text-success fs-6">
+                                                                Selezionate: € <span id="totale_lavorazioni_counter">0,00</span>
+                                                                · <span id="conteggio_lavorazioni_counter">0</span> macro
+                                                            </span>
+                                                        </div>
+                                                        <p class="text-muted small mb-2">
+                                                            Le righe verranno aggiunte al documento al salvataggio. <strong>I totali imponibile / imposta / totale saranno ricalcolati automaticamente lato server</strong> sommando i prodotti e le lavorazioni selezionate.
+                                                        </p>
                                                         <input type="text" id="filtro_lavorazioni" class="form-control form-control-sm mb-2" placeholder="🔍 Filtra per codice o descrizione...">
                                                         <div class="border rounded p-2" style="max-height: 260px; overflow-y: auto;">
                                                             @foreach($lavorazioni_disponibili as $lav)
                                                                 <div class="form-check lav-apply-row" data-search="{{ strtolower($lav->codice.' '.$lav->descrizione) }}">
-                                                                    <input class="form-check-input" type="checkbox" name="lavorazioni_applicate[]" value="{{ $lav->id }}" id="lav_apply_{{ $lav->id }}">
+                                                                    <input class="form-check-input lav-apply-checkbox" type="checkbox" name="lavorazioni_applicate[]" value="{{ $lav->id }}" id="lav_apply_{{ $lav->id }}" data-totale="{{ $lav->totale }}">
                                                                     <label class="form-check-label" for="lav_apply_{{ $lav->id }}">
                                                                         <strong>{{ $lav->codice }}</strong> — {{ $lav->descrizione }}
                                                                         <small class="text-muted">(€ {{ number_format($lav->totale,2,',','.') }})</small>
@@ -1235,6 +1243,19 @@
                                                                 document.querySelectorAll('.lav-apply-row').forEach(function(row) {
                                                                     row.style.display = (q === '' || row.dataset.search.indexOf(q) !== -1) ? '' : 'none';
                                                                 });
+                                                            });
+
+                                                            function aggiornaContatoreLavorazioni() {
+                                                                var sum = 0, count = 0;
+                                                                document.querySelectorAll('.lav-apply-checkbox:checked').forEach(function(cb) {
+                                                                    sum += parseFloat(cb.dataset.totale || 0);
+                                                                    count++;
+                                                                });
+                                                                document.getElementById('totale_lavorazioni_counter').textContent = sum.toFixed(2).replace('.', ',');
+                                                                document.getElementById('conteggio_lavorazioni_counter').textContent = count;
+                                                            }
+                                                            document.querySelectorAll('.lav-apply-checkbox').forEach(function(cb) {
+                                                                cb.addEventListener('change', aggiornaContatoreLavorazioni);
                                                             });
                                                         </script>
                                                     </div>
