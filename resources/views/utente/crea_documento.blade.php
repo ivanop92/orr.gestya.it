@@ -1171,7 +1171,7 @@
                                     </div>
                                 @endif
 
-                                @if(!empty($azienda) && !empty($azienda->manut_workflow_accettazione_multistep) && in_array($cd_do, ['PRV','ORD']))
+                                @if(!empty($azienda) && !empty($azienda->manut_workflow_accettazione_multistep) && in_array($cd_do, ['PRE','ORD']))
                                     <div class="card mt-3">
                                         <div class="card-header bg-soft-info p-3">
                                             <h5 class="card-title mb-0"><i class="ri-train-line me-2"></i>Manutenzione</h5>
