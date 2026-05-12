@@ -4176,7 +4176,7 @@ ORDER BY s.data_scadenza ASC',
 
             /*evita l'inserimento di queste cose*/
             $datiDotes = array_filter($dati, function($key) {
-                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows' && $key !== 'lavorazioni_applicate' && $key !== 'righe_lavorazione';
+                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows' && $key !== 'lavorazioni_applicate' && $key !== 'righe_lavorazione' && $key !== '_token';
             }, ARRAY_FILTER_USE_KEY);
 
             $datiDotes['da_registrare'] = 0;
