@@ -5217,7 +5217,16 @@ ORDER BY s.data_scadenza ASC',
             'oggetto_visibile' => $dotesOriginale->oggetto_visibile,
             'oggetto_interno' => $dotesOriginale->oggetto_interno,
             'data_consegna' => $dotesOriginale->data_consegna,
-            'id_commessa' => $dotesOriginale->id_commessa
+            'id_commessa' => $dotesOriginale->id_commessa,
+            // Manutenzione: copia il vagone e RESETTA il workflow accettazione (il duplicato riparte da zero)
+            'id_vagone'              => $dotesOriginale->id_vagone ?? null,
+            'stato_accettazione'     => null,
+            'motivo_rifiuto'         => null,
+            'tentativi'              => 0,
+            'accettato_da_id_utente' => null,
+            'inviato_revisione_il'   => null,
+            'accettato_il'           => null,
+            'rifiutato_il'           => null,
         ];
 
         // Inserisci il nuovo documento
@@ -5244,7 +5253,13 @@ ORDER BY s.data_scadenza ASC',
                 'natura' => $riga->natura,
                 'rif_normativo' => $riga->rif_normativo,
                 'rif_normativo_pdf' => $riga->rif_normativo_pdf,
-                'iva' => $riga->iva
+                'iva' => $riga->iva,
+                // Preserva ordine righe (drag-drop)
+                'n_riga' => $riga->n_riga,
+                // Manutenzione: preserva legami a vagone e lavorazione di origine
+                'id_vagone'                   => $riga->id_vagone ?? null,
+                'id_lavorazione_origine'      => $riga->id_lavorazione_origine ?? null,
+                'id_lavorazione_riga_origine' => $riga->id_lavorazione_riga_origine ?? null,
             ];
             DB::table('dorig')->insert($nuovaRiga);
         }
