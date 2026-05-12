@@ -132,10 +132,7 @@
                             <h5 class="card-title mb-0"><i class="ri-list-check-2 me-2"></i>Righe Lavorazione</h5>
                             <small class="text-muted">Trascina ⠿ per riordinare. Click "Applica Lavorazione" per importare righe dal catalogo.</small>
                         </div>
-                        <div class="flex-shrink-0 hstack gap-2">
-                            <button type="button" class="btn btn-soft-success btn-sm" data-bs-toggle="modal" data-bs-target="#modal_applica_lav_form">
-                                <i class="mdi mdi-package-variant me-1"></i> Applica Lavorazione
-                            </button>
+                        <div class="flex-shrink-0">
                             <button type="button" class="btn btn-primary btn-sm" onclick="aggiungiRigaManutenzione()">
                                 <i class="ri-add-line me-1"></i> Aggiungi Riga
                             </button>
@@ -202,51 +199,6 @@
     </div>
 </div>
 
-{{-- ============ Modal Applica Lavorazione (selezione righe singole o macro intera) ============ --}}
-<div class="modal fade" id="modal_applica_lav_form" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-xl">
-        <div class="modal-content border-0">
-            <div class="modal-header bg-soft-success p-3">
-                <h5 class="modal-title"><i class="mdi mdi-package-variant me-2"></i>Seleziona righe dal catalogo lavorazioni</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-0">
-                <div class="p-3 border-bottom">
-                    <input type="text" id="filtro_lav_modal" class="form-control form-control-sm" placeholder="🔍 Cerca per codice, servizio, descrizione (sia macro che righe)...">
-                </div>
-                <div style="max-height: 520px; overflow-y: auto;">
-                    <table class="table table-hover table-sm mb-0 align-middle">
-                        <thead class="table-light" style="position:sticky; top:0; z-index:2;">
-                        <tr>
-                            <th style="width:36px;"></th>
-                            <th style="width:70px;">Servizio</th>
-                            <th style="width:100px;">Codice</th>
-                            <th>Descrizione</th>
-                            <th class="text-end" style="width:80px;">Qta</th>
-                            <th class="text-end" style="width:70px;">Min</th>
-                            <th class="text-end" style="width:90px;">P.U.</th>
-                            <th class="text-end" style="width:100px;">Totale</th>
-                        </tr>
-                        </thead>
-                        <tbody id="modal_lav_tbody">
-                            <tr><td colspan="8" class="text-center text-muted py-4">
-                                <div class="spinner-border text-success" role="status"></div>
-                                <div class="mt-2">Caricamento catalogo…</div>
-                            </td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <span class="text-muted me-auto"><strong id="conteggio_selezione">0</strong> righe selezionate</span>
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-success" onclick="applicaRigheDaModal()">
-                    <i class="ri-add-circle-line me-1"></i> Aggiungi righe selezionate
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <script>
     var TARIFFA_DEFAULT = {{ $tariffa_default }};
@@ -337,38 +289,6 @@
             ricalcolaAggregati();
         }
     }
-    function aggiornaContegnoSelezione() {
-        var n = document.querySelectorAll('.lav-riga-check:checked').length;
-        var el = document.getElementById('conteggio_selezione');
-        if (el) el.textContent = n;
-    }
-    function applicaRigheDaModal() {
-        var checked = document.querySelectorAll('.lav-riga-check:checked');
-        if (checked.length === 0) {
-            alert('Seleziona almeno una riga');
-            return;
-        }
-        checked.forEach(function(cb) {
-            aggiungiRigaManutenzione({
-                servizio: cb.dataset.servizio || '',
-                codice: cb.dataset.codice || '',
-                descrizione: cb.dataset.descrizione || '',
-                attivita: parseFloat(cb.dataset.attivita) || 1,
-                qta: parseFloat(cb.dataset.qta) || 0,
-                minuti: parseFloat(cb.dataset.minuti) || 0,
-                pu: parseFloat(cb.dataset.pu) || 0,
-                aliquota: parseInt(cb.dataset.aliquota, 10) || 22,
-                materiale: parseFloat(cb.dataset.materiale) || 0,
-                descrizione_materiale: cb.dataset.descrizione_materiale || '',
-                setup_tank: cb.dataset.setup_tank === '1' ? 1 : 0,
-            });
-            cb.checked = false;
-        });
-        document.querySelectorAll('.lav-macro-checkall').forEach(function(cb){ cb.checked = false; });
-        aggiornaContegnoSelezione();
-        var modal = bootstrap.Modal.getInstance(document.getElementById('modal_applica_lav_form'));
-        if (modal) modal.hide();
-    }
 
     // Cliente -> popola hidden snapshot
     document.getElementById('id_cliente_sel').addEventListener('change', function() {
@@ -384,129 +304,6 @@
         document.getElementById('sdi_hidden').value  = opt.dataset.sdi  || '';
     });
 
-    // Lazy load del catalogo righe al primo open della modale (per evitare DOM enorme al pageload)
-    var _modCatLoaded = false;
-    function _escHtml(s) {
-        if (s === null || s === undefined) return '';
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-    function _fmtNum(n, dec) {
-        var num = parseFloat(n) || 0;
-        if (num === 0) return '0';
-        var s = num.toFixed(dec);
-        s = s.replace(/0+$/, '').replace(/\.$/, '');
-        return s.replace('.', ',');
-    }
-    function _fmtEur(n) {
-        return (parseFloat(n) || 0).toFixed(2).replace('.', ',');
-    }
-    function caricaCatalogoLavorazioni() {
-        if (_modCatLoaded) return;
-        _modCatLoaded = true;
-        var tbody = document.getElementById('modal_lav_tbody');
-        fetch('/utente/ajax/catalogo_lavorazioni_righe', { credentials: 'same-origin' })
-            .then(function(r){ return r.json(); })
-            .then(function(data) {
-                var lavs = data.lavorazioni || [];
-                if (lavs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Catalogo lavorazioni vuoto. Crealo da Produzione → Catalogo Lavorazioni.</td></tr>';
-                    return;
-                }
-                var parts = [];
-                for (var i = 0; i < lavs.length; i++) {
-                    var lav = lavs[i];
-                    var righe = lav.righe || [];
-                    var macroSearch = (_escHtml((lav.codice || '') + ' ' + (lav.descrizione || ''))).toLowerCase();
-                    parts.push(
-                        '<tr class="table-secondary lav-macro-header" data-lav-id="'+lav.id+'" data-search="'+macroSearch+'">' +
-                        '<td><input type="checkbox" class="form-check-input lav-macro-checkall" data-lav-id="'+lav.id+'" title="Spunta tutte"></td>' +
-                        '<td colspan="7"><strong>'+_escHtml(lav.codice)+'</strong> — '+_escHtml(lav.descrizione)+
-                        ' <small class="text-muted">('+righe.length+' righe · totale macro € '+_fmtEur(lav.totale)+')</small></td>' +
-                        '</tr>'
-                    );
-                    for (var j = 0; j < righe.length; j++) {
-                        var r = righe[j];
-                        var search = (((r.servizio||'')+' '+(r.codice||'')+' '+(r.descrizione||'')+' '+(lav.codice||'')+' '+(lav.descrizione||''))).toLowerCase();
-                        parts.push(
-                            '<tr class="lav-riga-row" data-lav-id="'+lav.id+'" data-search="'+_escHtml(search)+'">' +
-                            '<td><input type="checkbox" class="form-check-input lav-riga-check"' +
-                            ' data-lav-id="'+lav.id+'"' +
-                            ' data-servizio="'+_escHtml(r.servizio)+'"' +
-                            ' data-codice="'+_escHtml(r.codice)+'"' +
-                            ' data-descrizione="'+_escHtml(r.descrizione)+'"' +
-                            ' data-attivita="'+(r.attivita||1)+'"' +
-                            ' data-qta="'+(r.qta||0)+'"' +
-                            ' data-minuti="'+(r.minuti||0)+'"' +
-                            ' data-pu="'+(r.pu||0)+'"' +
-                            ' data-aliquota="'+(r.aliquota||22)+'"' +
-                            ' data-materiale="'+(r.materiale||0)+'"' +
-                            ' data-descrizione_materiale="'+_escHtml(r.descrizione_materiale)+'"' +
-                            ' data-setup_tank="'+(r.setup_tank?'1':'0')+'"></td>' +
-                            '<td>'+_escHtml(r.servizio)+'</td>' +
-                            '<td>'+_escHtml(r.codice)+'</td>' +
-                            '<td>'+_escHtml(r.descrizione)+'</td>' +
-                            '<td class="text-end">'+_fmtNum(r.qta, 3)+'</td>' +
-                            '<td class="text-end">'+_fmtNum(r.minuti, 2)+'</td>' +
-                            '<td class="text-end">€ '+_fmtEur(r.pu)+'</td>' +
-                            '<td class="text-end">€ '+_fmtEur(r.pt)+'</td>' +
-                            '</tr>'
-                        );
-                    }
-                }
-                tbody.innerHTML = parts.join('');
-            })
-            .catch(function(err) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-3">Errore caricamento catalogo: '+err+'</td></tr>';
-                _modCatLoaded = false; // permetti retry
-            });
-    }
-    var _modalElLav = document.getElementById('modal_applica_lav_form');
-    if (_modalElLav) {
-        _modalElLav.addEventListener('show.bs.modal', caricaCatalogoLavorazioni);
-    }
-
-    // Filtro live nella modale, debounced. Riquery del DOM ogni volta perche' le righe sono iniettate via AJAX
-    (function() {
-        var debounceTimer = null;
-        function applicaFiltro(q) {
-            var matchByMacro = {};
-            document.querySelectorAll('.lav-riga-row').forEach(function(row) {
-                var match = (q === '' || row.dataset.search.indexOf(q) !== -1);
-                row.style.display = match ? '' : 'none';
-                if (match) matchByMacro[row.dataset.lavId] = true;
-            });
-            document.querySelectorAll('.lav-macro-header').forEach(function(h) {
-                var idLav = h.dataset.lavId;
-                var macroMatchesText = (q === '' || h.dataset.search.indexOf(q) !== -1);
-                h.style.display = (matchByMacro[idLav] || macroMatchesText) ? '' : 'none';
-            });
-        }
-        document.getElementById('filtro_lav_modal').addEventListener('input', function(e) {
-            var q = e.target.value.toLowerCase().trim();
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(function(){ applicaFiltro(q); }, 200);
-        });
-    })();
-
-    // Event delegation singolo invece di N listener sui checkbox (perf su migliaia di righe)
-    var _modalEl = document.getElementById('modal_applica_lav_form');
-    if (_modalEl) {
-        _modalEl.addEventListener('change', function(e) {
-            var t = e.target;
-            if (!t) return;
-            if (t.classList.contains('lav-macro-checkall')) {
-                var idLav = t.dataset.lavId;
-                document.querySelectorAll('.lav-riga-check[data-lav-id="'+idLav+'"]').forEach(function(rcb) {
-                    if (rcb.closest('tr').style.display !== 'none') {
-                        rcb.checked = t.checked;
-                    }
-                });
-                aggiornaContegnoSelezione();
-            } else if (t.classList.contains('lav-riga-check')) {
-                aggiornaContegnoSelezione();
-            }
-        });
-    }
 
     // Add: parte con 1 riga vuota
     document.addEventListener('DOMContentLoaded', function() {
