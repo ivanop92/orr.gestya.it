@@ -9184,11 +9184,24 @@ ORDER BY s.data_scadenza ASC',
         $dati = $request->all();
 
         if (isset($dati['salva_impostazioni'])) {
+            $tariffa = $dati['manut_tariffa_oraria_default'] ?? null;
+            if ($tariffa === null || $tariffa === '') {
+                $tariffa = 33.75;
+            } else {
+                $tariffa = (float) str_replace(',', '.', $tariffa);
+            }
+
             DB::table('aziende')
                 ->where('id', $utente->id_azienda)
                 ->update([
-                    'usa_lotti'   => isset($dati['usa_lotti']) ? 1 : 0,
-                    'usa_barcode' => isset($dati['usa_barcode']) ? 1 : 0,
+                    'usa_lotti'                              => isset($dati['usa_lotti']) ? 1 : 0,
+                    'usa_barcode'                            => isset($dati['usa_barcode']) ? 1 : 0,
+                    'manut_anagrafica_vagoni_attiva'         => isset($dati['manut_anagrafica_vagoni_attiva']) ? 1 : 0,
+                    'manut_certificato_ecm_separato'         => isset($dati['manut_certificato_ecm_separato']) ? 1 : 0,
+                    'manut_workflow_accettazione_multistep'  => isset($dati['manut_workflow_accettazione_multistep']) ? 1 : 0,
+                    'manut_magazzino_ricetta_default'        => isset($dati['manut_magazzino_ricetta_default']) ? 1 : 0,
+                    'manut_consuntivo_materiali_manutentore' => isset($dati['manut_consuntivo_materiali_manutentore']) ? 1 : 0,
+                    'manut_tariffa_oraria_default'           => $tariffa,
                 ]);
             return redirect()->back()->with('success', 'Impostazioni salvate con successo');
         }
