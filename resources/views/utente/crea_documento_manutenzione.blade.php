@@ -220,33 +220,77 @@
     </div>
 </div>
 
-{{-- ============ Modal Applica Lavorazione ============ --}}
+{{-- ============ Modal Applica Lavorazione (selezione righe singole o macro intera) ============ --}}
 <div class="modal fade" id="modal_applica_lav_form" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content border-0">
             <div class="modal-header bg-soft-success p-3">
-                <h5 class="modal-title"><i class="mdi mdi-package-variant me-2"></i>Applica Lavorazione dal catalogo</h5>
+                <h5 class="modal-title"><i class="mdi mdi-package-variant me-2"></i>Seleziona righe dal catalogo lavorazioni</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <p class="text-muted mb-2">Spunta una o più lavorazioni. Le loro righe verranno aggiunte alla tabella (modificabili).</p>
-                <input type="text" id="filtro_lav_modal" class="form-control form-control-sm mb-2" placeholder="🔍 Filtra per codice o descrizione...">
-                <div class="border rounded p-2" style="max-height: 380px; overflow-y: auto;">
-                    @foreach($lavorazioni_payload as $lav)
-                        <div class="form-check lav-modal-row" data-search="{{ strtolower($lav['codice'].' '.$lav['descrizione']) }}">
-                            <input class="form-check-input lav-modal-check" type="checkbox" value="{{ $lav['id'] }}" id="lav_mod_{{ $lav['id'] }}">
-                            <label class="form-check-label" for="lav_mod_{{ $lav['id'] }}">
-                                <strong>{{ $lav['codice'] }}</strong> — {{ $lav['descrizione'] }}
-                                <small class="text-muted">(€ {{ number_format($lav['totale'],2,',','.') }} · {{ count($lav['righe']) }} righe)</small>
-                            </label>
-                        </div>
-                    @endforeach
+            <div class="modal-body p-0">
+                <div class="p-3 border-bottom">
+                    <input type="text" id="filtro_lav_modal" class="form-control form-control-sm" placeholder="🔍 Cerca per codice, servizio, descrizione (sia macro che righe)...">
+                </div>
+                <div style="max-height: 520px; overflow-y: auto;">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead class="table-light" style="position:sticky; top:0; z-index:2;">
+                        <tr>
+                            <th style="width:36px;"></th>
+                            <th style="width:70px;">Servizio</th>
+                            <th style="width:100px;">Codice</th>
+                            <th>Descrizione</th>
+                            <th class="text-end" style="width:80px;">Qta</th>
+                            <th class="text-end" style="width:70px;">Min</th>
+                            <th class="text-end" style="width:90px;">P.U.</th>
+                            <th class="text-end" style="width:100px;">Totale</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($lavorazioni_payload as $lav)
+                                <tr class="table-secondary lav-macro-header" data-lav-id="{{ $lav['id'] }}" data-search="{{ strtolower($lav['codice'].' '.$lav['descrizione']) }}">
+                                    <td><input type="checkbox" class="form-check-input lav-macro-checkall" data-lav-id="{{ $lav['id'] }}" title="Spunta tutte le righe di questa macro"></td>
+                                    <td colspan="7">
+                                        <strong>{{ $lav['codice'] }}</strong> — {{ $lav['descrizione'] }}
+                                        <small class="text-muted">({{ count($lav['righe']) }} righe · totale macro € {{ number_format($lav['totale'],2,',','.') }})</small>
+                                    </td>
+                                </tr>
+                                @foreach($lav['righe'] as $r)
+                                    <tr class="lav-riga-row" data-lav-id="{{ $lav['id'] }}" data-search="{{ strtolower(($r->servizio?:'').' '.($r->codice?:'').' '.($r->descrizione?:'').' '.$lav['codice'].' '.$lav['descrizione']) }}">
+                                        <td>
+                                            <input type="checkbox" class="form-check-input lav-riga-check"
+                                                data-lav-id="{{ $lav['id'] }}"
+                                                data-servizio="{{ $r->servizio }}"
+                                                data-codice="{{ $r->codice }}"
+                                                data-descrizione="{{ $r->descrizione }}"
+                                                data-attivita="{{ $r->attivita }}"
+                                                data-qta="{{ $r->qta }}"
+                                                data-minuti="{{ $r->minuti }}"
+                                                data-pu="{{ $r->pu }}"
+                                                data-aliquota="{{ $r->aliquota }}"
+                                                data-materiale="{{ $r->materiale }}"
+                                                data-descrizione_materiale="{{ $r->descrizione_materiale }}"
+                                                data-setup_tank="{{ $r->setup_tank }}">
+                                        </td>
+                                        <td>{{ $r->servizio }}</td>
+                                        <td>{{ $r->codice }}</td>
+                                        <td>{{ $r->descrizione }}</td>
+                                        <td class="text-end">{{ rtrim(rtrim(number_format($r->qta,3,',','.'),'0'),',') ?: '0' }}</td>
+                                        <td class="text-end">{{ rtrim(rtrim(number_format($r->minuti,2,',','.'),'0'),',') ?: '0' }}</td>
+                                        <td class="text-end">€ {{ number_format($r->pu,2,',','.') }}</td>
+                                        <td class="text-end">€ {{ number_format($r->pt,2,',','.') }}</td>
+                                    </tr>
+                                @endforeach
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
             </div>
             <div class="modal-footer">
+                <span class="text-muted me-auto"><strong id="conteggio_selezione">0</strong> righe selezionate</span>
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
-                <button type="button" class="btn btn-success" onclick="applicaLavorazioniDaModal()">
-                    <i class="ri-add-circle-line me-1"></i> Aggiungi alle Righe
+                <button type="button" class="btn btn-success" onclick="applicaRigheDaModal()">
+                    <i class="ri-add-circle-line me-1"></i> Aggiungi righe selezionate
                 </button>
             </div>
         </div>
@@ -343,32 +387,35 @@
             ricalcolaAggregati();
         }
     }
-    function applicaLavorazioniDaModal() {
-        var checked = document.querySelectorAll('.lav-modal-check:checked');
+    function aggiornaContegnoSelezione() {
+        var n = document.querySelectorAll('.lav-riga-check:checked').length;
+        var el = document.getElementById('conteggio_selezione');
+        if (el) el.textContent = n;
+    }
+    function applicaRigheDaModal() {
+        var checked = document.querySelectorAll('.lav-riga-check:checked');
         if (checked.length === 0) {
-            alert('Seleziona almeno una lavorazione');
+            alert('Seleziona almeno una riga');
             return;
         }
         checked.forEach(function(cb) {
-            var idLav = parseInt(cb.value, 10);
-            var lav = LAVORAZIONI_PAYLOAD.find(function(l){ return l.id === idLav; });
-            if (!lav || !lav.righe) return;
-            lav.righe.forEach(function(r) {
-                aggiungiRigaManutenzione({
-                    servizio: r.servizio || '',
-                    codice: r.codice || '',
-                    descrizione: r.descrizione || '',
-                    attivita: r.attivita,
-                    qta: r.qta,
-                    minuti: r.minuti,
-                    pu: r.pu,
-                    aliquota: r.aliquota,
-                    materiale: r.materiale,
-                    setup_tank: r.setup_tank ? 1 : 0,
-                });
+            aggiungiRigaManutenzione({
+                servizio: cb.dataset.servizio || '',
+                codice: cb.dataset.codice || '',
+                descrizione: cb.dataset.descrizione || '',
+                attivita: parseFloat(cb.dataset.attivita) || 1,
+                qta: parseFloat(cb.dataset.qta) || 0,
+                minuti: parseFloat(cb.dataset.minuti) || 0,
+                pu: parseFloat(cb.dataset.pu) || 0,
+                aliquota: parseInt(cb.dataset.aliquota, 10) || 22,
+                materiale: parseFloat(cb.dataset.materiale) || 0,
+                descrizione_materiale: cb.dataset.descrizione_materiale || '',
+                setup_tank: cb.dataset.setup_tank === '1' ? 1 : 0,
             });
             cb.checked = false;
         });
+        document.querySelectorAll('.lav-macro-checkall').forEach(function(cb){ cb.checked = false; });
+        aggiornaContegnoSelezione();
         var modal = bootstrap.Modal.getInstance(document.getElementById('modal_applica_lav_form'));
         if (modal) modal.hide();
     }
@@ -387,12 +434,39 @@
         document.getElementById('sdi_hidden').value  = opt.dataset.sdi  || '';
     });
 
-    // Filtro live nella modale lavorazioni
+    // Filtro live nella modale (su righe E macro header)
     document.getElementById('filtro_lav_modal').addEventListener('input', function(e) {
         var q = e.target.value.toLowerCase().trim();
-        document.querySelectorAll('.lav-modal-row').forEach(function(row) {
-            row.style.display = (q === '' || row.dataset.search.indexOf(q) !== -1) ? '' : 'none';
+        var matchByMacro = {};
+        document.querySelectorAll('.lav-riga-row').forEach(function(row) {
+            var match = (q === '' || row.dataset.search.indexOf(q) !== -1);
+            row.style.display = match ? '' : 'none';
+            if (match) matchByMacro[row.dataset.lavId] = true;
         });
+        document.querySelectorAll('.lav-macro-header').forEach(function(h) {
+            var idLav = h.dataset.lavId;
+            var macroMatchesText = (q === '' || h.dataset.search.indexOf(q) !== -1);
+            h.style.display = (matchByMacro[idLav] || macroMatchesText) ? '' : 'none';
+        });
+    });
+
+    // "Spunta tutte le righe di questa macro"
+    document.querySelectorAll('.lav-macro-checkall').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var idLav = cb.dataset.lavId;
+            document.querySelectorAll('.lav-riga-check[data-lav-id="'+idLav+'"]').forEach(function(rcb) {
+                // applica solo alle righe visibili (per rispettare il filtro)
+                if (rcb.closest('tr').style.display !== 'none') {
+                    rcb.checked = cb.checked;
+                }
+            });
+            aggiornaContegnoSelezione();
+        });
+    });
+
+    // Aggiorna conteggio al cambio singola riga
+    document.querySelectorAll('.lav-riga-check').forEach(function(cb) {
+        cb.addEventListener('change', aggiornaContegnoSelezione);
     });
 
     // Add: parte con 1 riga vuota
