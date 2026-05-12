@@ -19,6 +19,7 @@
         <!-- end page title -->
 
         @include('utente.common.workflow_accettazione', ['dotes' => $dotes, 'utente' => $utente])
+        @include('utente.common.applica_lavorazioni', ['dotes' => $dotes, 'utente' => $utente])
 
         <div class="row">
             <div class="col-lg-12">

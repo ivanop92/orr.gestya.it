@@ -38,6 +38,7 @@ Route::post('utente/documento_workflow/{id_dotes}/{azione}',array('uses'=>'Utent
 Route::any('utente/lavorazioni',array('uses'=>'UtenteController@lavorazioni'));
 Route::any('utente/dettaglio_lavorazione/{id}',array('uses'=>'UtenteController@dettaglio_lavorazione'));
 Route::post('utente/ajax/ordina_righe_lavorazione/{id_lavorazione}',array('uses'=>'UtenteController@ordina_righe_lavorazione'));
+Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));
 Route::any('utente/fasi_di_lavorazione',array('uses'=>'UtenteController@fasi_di_lavorazione'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));

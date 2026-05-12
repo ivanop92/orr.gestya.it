@@ -11198,6 +11198,29 @@ ORDER BY s.data_scadenza ASC',
         return redirect()->back()->with('error', $msg);
     }
 
+    public function applica_lavorazioni_a_documento($id_dotes, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $ids = $request->input('id_lavorazioni', []);
+
+        if (!is_array($ids) || count($ids) === 0) {
+            return redirect()->back()->with('error', 'Nessuna lavorazione selezionata');
+        }
+
+        [$ok, $msg, $n] = \App\Services\ApplicaLavorazione::applicaA(
+            (int) $id_dotes,
+            (int) $utente->id_azienda,
+            $ids,
+            (int) $utente->id
+        );
+
+        if ($ok) {
+            return redirect()->back()->with('success', $msg);
+        }
+        return redirect()->back()->with('error', $msg);
+    }
+
     public function lavorazioni(Request $request)
     {
         $this->is_loggato();
