@@ -102,6 +102,12 @@ $num_da_registrare = DB::select('SELECT ifnull(COUNT(id),0) AS num FROM dotes WH
                     <ul class="nav nav-sm flex-column">
 
                         <li class="nav-item">
+                            <a class="nav-link menu-link" href="/utente/lavorazioni">
+                                <i class="mdi mdi-package-variant"></i> <span data-key="t-widgets">Catalogo Lavorazioni</span>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <a class="nav-link menu-link" href="/utente/fasi_di_lavorazione">
                                 <i class="mdi mdi-alpha-f-box-outline"></i> <span data-key="t-widgets">Fasi di Lavorazione</span>
                             </a>

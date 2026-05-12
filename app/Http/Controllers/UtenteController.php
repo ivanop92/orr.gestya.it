@@ -11198,6 +11198,189 @@ ORDER BY s.data_scadenza ASC',
         return redirect()->back()->with('error', $msg);
     }
 
+    public function lavorazioni(Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        if (isset($dati['aggiungi'])) {
+            unset($dati['aggiungi'], $dati['_token']);
+            $dati['id_azienda'] = $utente->id_azienda;
+            $dati['id_utente']  = $utente->id;
+            $dati['totale']     = 0;
+            $dati['attivo']     = 1;
+
+            $id_lav = DB::table('lavorazioni')->insertGetId($dati);
+            return Redirect::to('utente/dettaglio_lavorazione/'.$id_lav)->with('success', 'Lavorazione creata. Aggiungi le righe.');
+        }
+
+        if (isset($dati['elimina'])) {
+            $id = (int) $dati['id'];
+            DB::table('lavorazioni_righe')
+                ->where('id_lavorazione', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->delete();
+            DB::table('lavorazioni')
+                ->where('id', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->delete();
+            return Redirect::to('utente/lavorazioni')->with('success', 'Lavorazione eliminata');
+        }
+
+        $lavorazioni = DB::table('lavorazioni')
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('descrizione')
+            ->get();
+
+        $page = 'lavorazioni';
+        return View::make('utente.lavorazioni', compact('utente', 'lavorazioni', 'page'));
+    }
+
+    public function dettaglio_lavorazione($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        if (isset($dati['modifica_testata'])) {
+            DB::table('lavorazioni')
+                ->where('id', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->update([
+                    'codice'      => $dati['codice'] ?? null,
+                    'descrizione' => $dati['descrizione'] ?? '',
+                    'attivo'      => isset($dati['attivo']) ? 1 : 0,
+                ]);
+            return Redirect::to('utente/dettaglio_lavorazione/'.$id)->with('success', 'Intestazione aggiornata');
+        }
+
+        if (isset($dati['aggiungi_riga'])) {
+            $maxOrd = (int) DB::table('lavorazioni_righe')
+                ->where('id_lavorazione', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->max('ordinamento');
+
+            $riga = $this->normalizza_lavorazione_riga($dati);
+            $riga['id_lavorazione'] = $id;
+            $riga['id_azienda']     = $utente->id_azienda;
+            $riga['id_utente']      = $utente->id;
+            $riga['ordinamento']    = $maxOrd + 1;
+
+            DB::table('lavorazioni_righe')->insert($riga);
+            $this->ricalcola_totale_lavorazione((int) $id, (int) $utente->id_azienda);
+            return Redirect::to('utente/dettaglio_lavorazione/'.$id)->with('success', 'Riga aggiunta');
+        }
+
+        if (isset($dati['modifica_riga'])) {
+            $id_riga = (int) $dati['id_riga'];
+            $riga = $this->normalizza_lavorazione_riga($dati);
+            DB::table('lavorazioni_righe')
+                ->where('id', $id_riga)
+                ->where('id_lavorazione', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->update($riga);
+            $this->ricalcola_totale_lavorazione((int) $id, (int) $utente->id_azienda);
+            return Redirect::to('utente/dettaglio_lavorazione/'.$id)->with('success', 'Riga modificata');
+        }
+
+        if (isset($dati['elimina_riga'])) {
+            DB::table('lavorazioni_righe')
+                ->where('id', (int) $dati['id_riga'])
+                ->where('id_lavorazione', $id)
+                ->where('id_azienda', $utente->id_azienda)
+                ->delete();
+            $this->ricalcola_totale_lavorazione((int) $id, (int) $utente->id_azienda);
+            return Redirect::to('utente/dettaglio_lavorazione/'.$id)->with('success', 'Riga eliminata');
+        }
+
+        $lavorazione = DB::table('lavorazioni')
+            ->where('id', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->first();
+
+        if (!$lavorazione) {
+            return Redirect::to('utente/lavorazioni')->with('error', 'Lavorazione non trovata');
+        }
+
+        $righe = DB::table('lavorazioni_righe')
+            ->where('id_lavorazione', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('ordinamento')
+            ->get();
+
+        $page = 'lavorazioni';
+        return View::make('utente.dettaglio_lavorazione', compact('utente', 'lavorazione', 'righe', 'page'));
+    }
+
+    public function ordina_righe_lavorazione($id_lavorazione, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $ids = $request->input('ids', []);
+
+        if (!is_array($ids)) {
+            return response()->json(['ok' => false, 'error' => 'ids deve essere array']);
+        }
+
+        foreach ($ids as $idx => $id_riga) {
+            DB::table('lavorazioni_righe')
+                ->where('id', (int) $id_riga)
+                ->where('id_lavorazione', (int) $id_lavorazione)
+                ->where('id_azienda', $utente->id_azienda)
+                ->update(['ordinamento' => $idx + 1]);
+        }
+
+        return response()->json(['ok' => true, 'count' => count($ids)]);
+    }
+
+    private function normalizza_lavorazione_riga(array $dati): array
+    {
+        $out = [
+            'servizio'              => isset($dati['servizio']) && $dati['servizio'] !== '' ? $dati['servizio'] : null,
+            'codice'                => isset($dati['codice']) && $dati['codice'] !== '' ? $dati['codice'] : null,
+            'setup_tank'            => isset($dati['setup_tank']) ? 1 : 0,
+            'descrizione'           => $dati['descrizione'] ?? null,
+            'attivita'              => isset($dati['attivita']) && $dati['attivita'] !== '' ? $dati['attivita'] : null,
+            'qta'                   => $this->parse_decimal($dati['qta'] ?? 0),
+            'minuti'                => $this->parse_decimal($dati['minuti'] ?? 0),
+            'pu'                    => $this->parse_decimal($dati['pu'] ?? 0),
+            'aliquota'              => (int) ($dati['aliquota'] ?? 22),
+            'materiale'             => $this->parse_decimal($dati['materiale'] ?? 0),
+            'descrizione_materiale' => isset($dati['descrizione_materiale']) && $dati['descrizione_materiale'] !== '' ? $dati['descrizione_materiale'] : null,
+        ];
+
+        if ($out['minuti'] > 0) {
+            $out['pt'] = round($out['pu'] * $out['minuti'] / 60, 2);
+        } else {
+            $out['pt'] = round($out['pu'] * $out['qta'], 2);
+        }
+        $out['imponibile'] = $out['pt'];
+        $out['imposta']    = round($out['pt'] * $out['aliquota'] / 100, 2);
+
+        return $out;
+    }
+
+    private function parse_decimal($v): float
+    {
+        if ($v === null || $v === '') return 0.0;
+        if (is_numeric($v)) return (float) $v;
+        return (float) str_replace(',', '.', $v);
+    }
+
+    private function ricalcola_totale_lavorazione(int $id_lavorazione, int $id_azienda): void
+    {
+        $totale = (float) DB::table('lavorazioni_righe')
+            ->where('id_lavorazione', $id_lavorazione)
+            ->where('id_azienda', $id_azienda)
+            ->sum('imponibile');
+
+        DB::table('lavorazioni')
+            ->where('id', $id_lavorazione)
+            ->where('id_azienda', $id_azienda)
+            ->update(['totale' => $totale]);
+    }
+
     private function normalizza_vagone(array $dati): array
     {
         unset($dati['_token']);
