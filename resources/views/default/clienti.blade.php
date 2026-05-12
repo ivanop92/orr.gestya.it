@@ -383,7 +383,7 @@
             "url": "https://company.openapi.com/IT-advanced/"+piva,
             "method": "GET",
             "headers": {
-                "Authorization": "Bearer 66cdb99c9c5ff0e89b0bec98"
+                "Authorization": "Bearer 68dc0564cc8194517e0ca866"
             }
         };
 
