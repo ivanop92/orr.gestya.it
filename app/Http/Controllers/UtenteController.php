@@ -11176,6 +11176,28 @@ ORDER BY s.data_scadenza ASC',
         return View::make('utente.dettaglio_vagone', compact('utente', 'vagone', 'clienti', 'page'));
     }
 
+    public function documento_workflow($id_dotes, $azione, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        $motivo = $dati['motivo_rifiuto'] ?? null;
+
+        [$ok, $msg] = \App\Services\WorkflowAccettazione::transiziona(
+            (int) $id_dotes,
+            (int) $utente->id_azienda,
+            $azione,
+            (int) $utente->id,
+            $motivo
+        );
+
+        if ($ok) {
+            return redirect()->back()->with('success', $msg);
+        }
+        return redirect()->back()->with('error', $msg);
+    }
+
     private function normalizza_vagone(array $dati): array
     {
         unset($dati['_token']);

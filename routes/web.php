@@ -34,6 +34,7 @@ Route::any('utente/fornitori',array('uses'=>'UtenteController@fornitori'));
 Route::any('utente/dettaglio_fornitore/{id}',array('uses'=>'UtenteController@dettaglio_fornitore'));
 Route::any('utente/vagoni',array('uses'=>'UtenteController@vagoni'));
 Route::any('utente/dettaglio_vagone/{id}',array('uses'=>'UtenteController@dettaglio_vagone'));
+Route::post('utente/documento_workflow/{id_dotes}/{azione}',array('uses'=>'UtenteController@documento_workflow'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));
 Route::any('utente/fasi_di_lavorazione',array('uses'=>'UtenteController@fasi_di_lavorazione'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));

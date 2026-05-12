@@ -18,6 +18,8 @@
         </div>
         <!-- end page title -->
 
+        @include('utente.common.workflow_accettazione', ['dotes' => $dotes, 'utente' => $utente])
+
         <div class="row">
             <div class="col-lg-12">
                 <div class="card">
