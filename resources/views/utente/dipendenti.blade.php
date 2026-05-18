@@ -223,6 +223,18 @@
                             </div>
                         </div>
 
+                        <div class="col-md-12">
+                            <hr>
+                            <input type="hidden" name="manutentore" value="0">
+                            <div class="form-check form-switch form-switch-md">
+                                <input class="form-check-input" type="checkbox" id="manutentore_add" name="manutentore" value="1">
+                                <label class="form-check-label" for="manutentore_add">
+                                    <strong><i class="ri-tools-line me-1"></i>Manutentore</strong>
+                                </label>
+                            </div>
+                            <small class="text-muted">Marca questo dipendente come manutentore: potrà essere assegnato agli Interventi Manutenzione (step 2).</small>
+                        </div>
+
                     </div>
                 </div>
                 <div class="modal-footer">

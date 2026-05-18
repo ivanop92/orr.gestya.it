@@ -11807,9 +11807,11 @@ ORDER BY s.data_scadenza ASC',
             ->orderByDesc('created_at')
             ->get();
 
+        // Dipendenti dell'azienda flaggati come manutentori (id_tipologia=3 + manutentore=1)
         $operatori = DB::table('utenti')
             ->where('id_azienda', $utente->id_azienda)
-            ->where('id_tipologia', 2) // operatori produzione
+            ->where('id_tipologia', 3)
+            ->where('manutentore', 1)
             ->orderBy('cognome')
             ->orderBy('nome')
             ->get();
