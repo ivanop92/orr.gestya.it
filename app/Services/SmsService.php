@@ -13,7 +13,7 @@ class SmsService
     public static function send(string $numero, string $messaggio): array
     {
         $token  = env('MESSAGGISMS_TOKEN', '693ff94f8c8b1f97500ccb65');
-        $sender = env('MESSAGGISMS_SENDER', 'Gestya.it');
+        $sender = env('MESSAGGISMS_SENDER', 'KAIROS');
         $url    = 'https://ws.messaggisms.com/messages/';
 
         $numero = self::normalizzaNumero($numero);
@@ -21,9 +21,12 @@ class SmsService
             return ['ok' => false, 'message' => 'Numero di telefono non valido'];
         }
 
+        // Provo formato E.164 (+39...) - il log ci dira' se l'API lo accetta o vuole senza +
+        $numeroApi = $numero;
+
         $payload = [
             'sender'    => $sender,
-            'recipient' => $numero,
+            'recipient' => $numeroApi,
             'message'   => $messaggio,
         ];
 
@@ -46,8 +49,17 @@ class SmsService
             $err  = curl_error($ch);
             curl_close($ch);
 
+            // Log completo per debug
+            Log::info('SMS messaggisms', [
+                'http_code' => $code,
+                'sender'    => $sender,
+                'recipient' => $numeroApi,
+                'message'   => $messaggio,
+                'response'  => $body,
+                'curl_err'  => $err,
+            ]);
+
             if ($err) {
-                Log::warning('SMS curl error', ['err' => $err]);
                 return ['ok' => false, 'message' => 'Errore di connessione: '.$err];
             }
 
@@ -55,7 +67,14 @@ class SmsService
             if ($code >= 200 && $code < 300) {
                 return ['ok' => true, 'message' => 'SMS inviato', 'response' => $resp];
             }
-            return ['ok' => false, 'message' => 'Errore SMS (HTTP '.$code.')', 'response' => $resp];
+
+            // Estrai messaggio errore dalla risposta API se presente
+            $apiErr = is_array($resp) ? (
+                $resp['message'] ?? $resp['error'] ?? ($resp['errors'] ?? json_encode($resp))
+            ) : $body;
+            if (is_array($apiErr)) $apiErr = json_encode($apiErr);
+
+            return ['ok' => false, 'message' => 'API HTTP '.$code.' — '.$apiErr];
         } catch (\Exception $e) {
             Log::warning('SMS exception', ['err' => $e->getMessage()]);
             return ['ok' => false, 'message' => $e->getMessage()];
