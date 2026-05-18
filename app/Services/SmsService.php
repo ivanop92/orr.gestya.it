@@ -16,17 +16,15 @@ class SmsService
         $sender = env('MESSAGGISMS_SENDER', 'KAIROS');
         $url    = 'https://ws.messaggisms.com/messages/';
 
-        $numero = self::normalizzaNumero($numero);
-        if (!$numero) {
+        $numeroApi = self::normalizzaNumero($numero);
+        if (!$numeroApi) {
             return ['ok' => false, 'message' => 'Numero di telefono non valido'];
         }
 
-        // L'API rifiuta E.164 con '+', vuole il prefisso paese senza '+'
-        $numeroApi = ltrim($numero, '+');
-
+        // Format messaggisms: "+39-DDDDDDDDDD" come stringa singola
         $payload = [
             'sender'     => $sender,
-            'recipients' => [['phone' => $numeroApi]],
+            'recipients' => $numeroApi,
             'body'       => $messaggio,
         ];
 
@@ -82,15 +80,29 @@ class SmsService
     }
 
     /**
-     * Normalizza un numero italiano: rimuove spazi/trattini, aggiunge +39 se mancante.
+     * Normalizza un numero in formato messaggisms: "+39-DDDDDDDDDD"
+     * Step: pulisce -> isola prefisso e numero nazionale -> ricompone con trattino.
      */
     public static function normalizzaNumero(string $n): ?string
     {
         $n = preg_replace('/[\s\-\.]/', '', $n);
         if (!$n) return null;
-        if (strpos($n, '+') === 0) return $n;
-        if (strpos($n, '00') === 0) return '+'.substr($n, 2);
-        if (strpos($n, '39') === 0 && strlen($n) >= 11) return '+'.$n;
-        return '+39'.$n; // assume IT
+        if (strpos($n, '00') === 0) $n = '+'.substr($n, 2);
+
+        // Determina prefisso + numero nazionale
+        if (strpos($n, '+') === 0) {
+            // +39NNNN, +39-NNNN, +1NNN, ecc
+            $rest = substr($n, 1);
+            // assume prefisso IT 39 di default. Per altri paesi servirebbe lookup; ok per il caso d'uso
+            if (strpos($rest, '39') === 0 && strlen($rest) >= 11) {
+                return '+39-'.substr($rest, 2);
+            }
+            return '+'.$rest; // fallback senza trattino
+        }
+        if (strpos($n, '39') === 0 && strlen($n) >= 11) {
+            return '+39-'.substr($n, 2);
+        }
+        // Solo cifre nazionali italiane (es. 3331234567)
+        return '+39-'.$n;
     }
 }
