@@ -58,6 +58,7 @@ Route::any('manutentore/intervento/{id}',array('uses'=>'UtenteController@manuten
 Route::post('manutentore/intervento/{id}/invia_report',array('uses'=>'UtenteController@manutentore_invia_report'));
 Route::any('manutentore/storico',array('uses'=>'UtenteController@manutentore_storico'));
 Route::post('manutentore/allegato/{id_allegato}/elimina',array('uses'=>'UtenteController@manutentore_elimina_allegato'));
+Route::get('manutentore/ajax/cerca_righe_catalogo',array('uses'=>'UtenteController@manutentore_search_righe_catalogo'));
 Route::any('manutentore/logout',array('uses'=>'UtenteController@logout'));
 Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));
 Route::post('utente/ajax/ordina_righe_documento/{id_dotes}',array('uses'=>'UtenteController@ordina_righe_documento'));

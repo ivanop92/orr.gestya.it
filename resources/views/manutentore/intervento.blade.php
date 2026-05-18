@@ -132,6 +132,20 @@
                 </div>
             </div>
 
+            <div class="card-info">
+                <div class="head d-flex align-items-center flex-wrap gap-2">
+                    <span class="flex-grow-1"><i class="ri-list-check-2 me-1"></i>Lavorazioni proposte (per preventivo)</span>
+                    <button type="button" class="btn btn-sm btn-soft-success" data-bs-toggle="modal" data-bs-target="#modal_cerca_lav"><i class="ri-search-line"></i> Catalogo</button>
+                    <button type="button" class="btn btn-sm btn-soft-primary" onclick="aggiungiLavorazione()"><i class="ri-add-line"></i> Manuale</button>
+                </div>
+                <div class="body p-0">
+                    <div id="lav_proposte_list" class="px-2 pb-2">
+                        {{-- Righe dinamiche --}}
+                    </div>
+                    <p class="text-muted small px-3 pb-2 mb-0">Righe di lavorazione che proponi per il preventivo. L'ufficio le riceverà già pronte allo step 4.</p>
+                </div>
+            </div>
+
             <div class="btn-sticky">
                 <button type="submit" class="btn btn-success w-100 btn-lg" onclick="return confirm('Inviare il report all\'ufficio?');">
                     <i class="ri-send-plane-line me-1"></i> Invia Report all'Ufficio
@@ -169,7 +183,134 @@
                     '</div>';
                 document.getElementById('materiali_list').insertAdjacentHTML('beforeend', html);
             }
+
+            // Lavorazioni proposte
+            var lavIdx = 0;
+            function _esc(s) { return s === null || s === undefined ? '' : String(s).replace(/"/g,'&quot;'); }
+            function aggiungiLavorazione(p) {
+                lavIdx++;
+                var i = lavIdx;
+                p = p || {};
+                var html =
+                    '<div class="border rounded p-2 mb-2 bg-light position-relative" id="lav_row_'+i+'">' +
+                        '<button type="button" class="btn-close position-absolute top-0 end-0 m-2" onclick="document.getElementById(\'lav_row_'+i+'\').remove()" title="Rimuovi"></button>' +
+                        '<input type="hidden" name="lavorazioni_proposte['+i+'][id_lavorazione_origine]" value="'+_esc(p.id_lavorazione_origine||'')+'">' +
+                        '<input type="hidden" name="lavorazioni_proposte['+i+'][id_lavorazione_riga_origine]" value="'+_esc(p.id_lavorazione_riga_origine||'')+'">' +
+                        '<div class="row g-2">' +
+                            '<div class="col-12">' +
+                                '<label class="form-label mb-1 small">Descrizione *</label>' +
+                                '<input type="text" name="lavorazioni_proposte['+i+'][descrizione]" class="form-control form-control-sm" placeholder="es. Sostituzione suole" value="'+_esc(p.descrizione)+'">' +
+                            '</div>' +
+                            '<div class="col-4">' +
+                                '<label class="form-label mb-1 small">Servizio</label>' +
+                                '<input type="text" name="lavorazioni_proposte['+i+'][servizio]" class="form-control form-control-sm" maxlength="10" value="'+_esc(p.servizio)+'">' +
+                            '</div>' +
+                            '<div class="col-8">' +
+                                '<label class="form-label mb-1 small">Codice</label>' +
+                                '<input type="text" name="lavorazioni_proposte['+i+'][codice]" class="form-control form-control-sm" value="'+_esc(p.codice)+'">' +
+                            '</div>' +
+                            '<div class="col-4">' +
+                                '<label class="form-label mb-1 small">Qta</label>' +
+                                '<input type="number" step="0.001" min="0" name="lavorazioni_proposte['+i+'][qta]" class="form-control form-control-sm" value="'+(p.qta!=null?p.qta:0)+'">' +
+                            '</div>' +
+                            '<div class="col-4">' +
+                                '<label class="form-label mb-1 small">Minuti</label>' +
+                                '<input type="number" step="0.01" min="0" name="lavorazioni_proposte['+i+'][minuti]" class="form-control form-control-sm" value="'+(p.minuti!=null?p.minuti:0)+'">' +
+                            '</div>' +
+                            '<div class="col-4">' +
+                                '<label class="form-label mb-1 small">Att.</label>' +
+                                '<input type="number" step="0.01" min="0" name="lavorazioni_proposte['+i+'][attivita]" class="form-control form-control-sm" value="'+(p.attivita!=null?p.attivita:1)+'">' +
+                            '</div>' +
+                            '<div class="col-6">' +
+                                '<label class="form-label mb-1 small">P.U. €</label>' +
+                                '<input type="number" step="0.01" min="0" name="lavorazioni_proposte['+i+'][pu]" class="form-control form-control-sm" value="'+(p.pu!=null?p.pu:0)+'">' +
+                            '</div>' +
+                            '<div class="col-6">' +
+                                '<label class="form-label mb-1 small">IVA%</label>' +
+                                '<input type="number" min="0" max="100" name="lavorazioni_proposte['+i+'][aliquota]" class="form-control form-control-sm" value="'+(p.aliquota!=null?p.aliquota:22)+'">' +
+                            '</div>' +
+                            '<div class="col-12">' +
+                                '<label class="form-label mb-1 small">Materiale €</label>' +
+                                '<input type="number" step="0.01" min="0" name="lavorazioni_proposte['+i+'][materiale]" class="form-control form-control-sm" value="'+(p.materiale!=null?p.materiale:0)+'">' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                document.getElementById('lav_proposte_list').insertAdjacentHTML('beforeend', html);
+            }
+
+            // Ricerca catalogo lavorazioni (AJAX server-side)
+            var ricercaTimer = null;
+            function ricercaCatalogo() {
+                clearTimeout(ricercaTimer);
+                ricercaTimer = setTimeout(function() {
+                    var q = document.getElementById('lav_search_q').value.trim();
+                    var resBox = document.getElementById('lav_search_results');
+                    if (q.length < 2) {
+                        resBox.innerHTML = '<div class="text-muted text-center py-3 small">Digita almeno 2 caratteri…</div>';
+                        return;
+                    }
+                    resBox.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-success"></div></div>';
+                    fetch('/manutentore/ajax/cerca_righe_catalogo?q=' + encodeURIComponent(q), { credentials:'same-origin' })
+                        .then(function(r){ return r.json(); })
+                        .then(function(data) {
+                            var righe = data.righe || [];
+                            if (righe.length === 0) {
+                                resBox.innerHTML = '<div class="text-muted text-center py-3 small">Nessuna riga trovata.</div>';
+                                return;
+                            }
+                            var html = '<div class="list-group list-group-flush">';
+                            righe.forEach(function(r) {
+                                var pt = parseFloat(r.pt || 0).toFixed(2).replace('.', ',');
+                                html += '<a href="#" class="list-group-item list-group-item-action" onclick="aggiungiDalCatalogo('+JSON.stringify(r).replace(/"/g, '&quot;')+'); return false;">' +
+                                    '<div class="d-flex"><div class="flex-grow-1">' +
+                                    '<strong>'+ (r.servizio||'') + '</strong> ' + (r.codice||'') + ' — ' + (r.descrizione||'') +
+                                    '<br><small class="text-muted">da ' + (r.lav_codice||'') + ' · ' + (r.lav_descrizione||'') + '</small>' +
+                                    '</div>' +
+                                    '<div class="text-end"><span class="badge bg-success">€ '+pt+'</span></div>' +
+                                    '</div></a>';
+                            });
+                            html += '</div>';
+                            resBox.innerHTML = html;
+                        })
+                        .catch(function(){ resBox.innerHTML = '<div class="text-danger small text-center py-2">Errore ricerca</div>'; });
+                }, 300);
+            }
+            function aggiungiDalCatalogo(r) {
+                aggiungiLavorazione({
+                    servizio: r.servizio || '',
+                    codice: r.codice || '',
+                    descrizione: r.descrizione || '',
+                    attivita: r.attivita || 1,
+                    qta: r.qta || 0,
+                    minuti: r.minuti || 0,
+                    pu: r.pu || 0,
+                    aliquota: r.aliquota || 22,
+                    materiale: r.materiale || 0,
+                    id_lavorazione_origine: r.id_lavorazione,
+                    id_lavorazione_riga_origine: r.id,
+                });
+                var modal = bootstrap.Modal.getInstance(document.getElementById('modal_cerca_lav'));
+                if (modal) modal.hide();
+            }
         </script>
+
+        {{-- Modale ricerca catalogo --}}
+        <div class="modal fade" id="modal_cerca_lav" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h6 class="modal-title"><i class="ri-search-line me-1"></i>Cerca riga lavorazione</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-2">
+                        <input type="text" id="lav_search_q" class="form-control mb-2" placeholder="Digita codice, servizio, descrizione..." oninput="ricercaCatalogo()" autofocus>
+                        <div id="lav_search_results" style="max-height: 60vh; overflow-y:auto;">
+                            <div class="text-muted text-center py-3 small">Digita almeno 2 caratteri…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     @elseif($intervento->step_corrente < 3)
         <div class="step-info mb-3">
@@ -222,6 +363,38 @@
                         </div>
                     @endforeach
                 </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Lavorazioni proposte gia' dichiarate --}}
+    @if(isset($proposte) && count($proposte) > 0)
+        <div class="card-info">
+            <div class="head"><i class="ri-list-check-2 me-1"></i>Lavorazioni proposte ({{ count($proposte) }})</div>
+            <div class="body p-0">
+                <ul class="list-group list-group-flush">
+                    @foreach($proposte as $p)
+                        <li class="list-group-item">
+                            <div class="d-flex">
+                                <div class="flex-grow-1">
+                                    @if($p->servizio)<span class="badge bg-soft-info text-info me-1">{{ $p->servizio }}</span>@endif
+                                    @if($p->codice)<small class="text-muted">[{{ $p->codice }}]</small>@endif
+                                    <strong>{{ $p->descrizione }}</strong>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-success">€ {{ number_format($p->pt,2,',','.') }}</span>
+                                </div>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                Qta {{ rtrim(rtrim(number_format($p->qta,3,',','.'),'0'),',') }}
+                                @if($p->minuti > 0) · {{ rtrim(rtrim(number_format($p->minuti,2,',',''),'0'),',') }} min @endif
+                                @if($p->attivita != 1) · att {{ rtrim(rtrim(number_format($p->attivita,2,',',''),'0'),',') }} @endif
+                                · P.U. € {{ number_format($p->pu,2,',','.') }}
+                                @if($p->materiale > 0) · Materiale € {{ number_format($p->materiale,2,',','.') }} @endif
+                            </div>
+                        </li>
+                    @endforeach
+                </ul>
             </div>
         </div>
     @endif

@@ -11755,7 +11755,13 @@ ORDER BY s.data_scadenza ASC',
             ->orderBy('id')
             ->get();
 
-        return View::make('manutentore.intervento', compact('utente', 'intervento', 'allegati', 'materiali'));
+        $proposte = DB::table('interventi_lavorazioni_proposte')
+            ->where('id_intervento', $id)
+            ->orderBy('ordinamento')
+            ->orderBy('id')
+            ->get();
+
+        return View::make('manutentore.intervento', compact('utente', 'intervento', 'allegati', 'materiali', 'proposte'));
     }
 
     public function manutentore_invia_report($id, Request $request)
@@ -11833,6 +11839,58 @@ ORDER BY s.data_scadenza ASC',
             }
         }
 
+        // Righe lavorazione proposte (servizio/codice/descrizione/qta/min/pu/...)
+        $proposte = $request->input('lavorazioni_proposte', []);
+        if (is_array($proposte)) {
+            $ord = 0;
+            foreach ($proposte as $r) {
+                if (!is_array($r)) continue;
+                $descr = trim($r['descrizione'] ?? '');
+                $codice = trim($r['codice'] ?? '');
+                if ($descr === '' && $codice === '') continue;
+                $ord++;
+
+                $qta       = (float) str_replace(',', '.', $r['qta'] ?? 0);
+                $minuti    = (float) str_replace(',', '.', $r['minuti'] ?? 0);
+                $pu        = (float) str_replace(',', '.', $r['pu'] ?? 0);
+                $attivita  = (float) str_replace(',', '.', $r['attivita'] ?? 1);
+                if ($attivita <= 0) $attivita = 1;
+                $aliquota  = (int) ($r['aliquota'] ?? 22);
+                $materiale = (float) str_replace(',', '.', $r['materiale'] ?? 0);
+
+                if ($minuti > 0) {
+                    $pt = round($pu * $minuti / 60, 2);
+                } else {
+                    $pt = round($pu * $attivita * $qta, 2);
+                }
+                $imposta = round($pt * $aliquota / 100, 2);
+
+                DB::table('interventi_lavorazioni_proposte')->insert([
+                    'id_intervento'              => $id,
+                    'id_azienda'                 => $utente->id_azienda,
+                    'id_utente'                  => $utente->id,
+                    'ordinamento'                => $ord,
+                    'servizio'                   => trim($r['servizio'] ?? '') ?: null,
+                    'codice'                     => $codice ?: null,
+                    'descrizione'                => $descr ?: null,
+                    'setup_tank'                 => isset($r['setup_tank']) && (int) $r['setup_tank'] === 1 ? 1 : 0,
+                    'attivita'                   => $attivita,
+                    'qta'                        => $qta,
+                    'minuti'                     => $minuti,
+                    'pu'                         => $pu,
+                    'aliquota'                   => $aliquota,
+                    'imposta'                    => $imposta,
+                    'imponibile'                 => $pt,
+                    'pt'                         => $pt,
+                    'materiale'                  => $materiale,
+                    'descrizione_materiale'      => trim($r['descrizione_materiale'] ?? '') ?: null,
+                    'id_lavorazione_origine'     => !empty($r['id_lavorazione_origine']) ? (int) $r['id_lavorazione_origine'] : null,
+                    'id_lavorazione_riga_origine'=> !empty($r['id_lavorazione_riga_origine']) ? (int) $r['id_lavorazione_riga_origine'] : null,
+                    'created_at'                 => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
+
         $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 3, 'completato', 'Report danni inviato dal manutentore');
 
         return Redirect::to('manutentore/dashboard')->with('success', 'Report inviato. L\'intervento passa all\'ufficio per l\'emissione del preventivo.');
@@ -11861,6 +11919,37 @@ ORDER BY s.data_scadenza ASC',
             ->paginate(30);
 
         return View::make('manutentore.storico', compact('utente', 'interventi'));
+    }
+
+    public function manutentore_search_righe_catalogo(Request $request)
+    {
+        $utente = $this->_check_manutentore();
+        $q = trim((string) $request->input('q', ''));
+        if (mb_strlen($q) < 2) {
+            return response()->json(['righe' => []]);
+        }
+        $righe = DB::table('lavorazioni_righe as lr')
+            ->join('lavorazioni as l', 'l.id', '=', 'lr.id_lavorazione')
+            ->where('lr.id_azienda', $utente->id_azienda)
+            ->where('l.attivo', 1)
+            ->where(function ($w) use ($q) {
+                $w->where('lr.servizio', 'like', '%'.$q.'%')
+                  ->orWhere('lr.codice', 'like', '%'.$q.'%')
+                  ->orWhere('lr.descrizione', 'like', '%'.$q.'%')
+                  ->orWhere('l.codice', 'like', '%'.$q.'%')
+                  ->orWhere('l.descrizione', 'like', '%'.$q.'%');
+            })
+            ->select(
+                'lr.id', 'lr.id_lavorazione', 'lr.servizio', 'lr.codice', 'lr.descrizione',
+                'lr.attivita', 'lr.qta', 'lr.minuti', 'lr.pu', 'lr.aliquota',
+                'lr.materiale', 'lr.descrizione_materiale', 'lr.setup_tank', 'lr.pt',
+                'l.codice as lav_codice', 'l.descrizione as lav_descrizione'
+            )
+            ->orderBy('l.descrizione')
+            ->orderBy('lr.ordinamento')
+            ->limit(60)
+            ->get();
+        return response()->json(['righe' => $righe]);
     }
 
     public function manutentore_elimina_allegato($id_allegato, Request $request)
@@ -12179,8 +12268,77 @@ ORDER BY s.data_scadenza ASC',
         ]);
 
         DB::table('interventi')->where('id', $id)->update(['id_dotes_preventivo' => $id_dotes]);
-        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 4, 'completato', 'Preventivo PRE #'.$numero_doc.' creato (dotes id '.$id_dotes.')');
-        return Redirect::to('utente/dettaglio_documento/'.$id_dotes)->with('success', 'Preventivo creato. Aggiungi le righe lavorazione qui. Quando hai finito, torna all\'intervento per la decisione ufficio.');
+
+        // Copia le righe proposte dal manutentore come righe dorig del preventivo
+        $proposte = DB::table('interventi_lavorazioni_proposte')
+            ->where('id_intervento', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('ordinamento')
+            ->orderBy('id')
+            ->get();
+
+        $nRiga = 0;
+        $sumImp = 0; $sumTax = 0; $sumTot = 0;
+        foreach ($proposte as $p) {
+            $nRiga++;
+            $isOrario = ((float) $p->minuti) > 0;
+            $attivita = $p->attivita > 0 ? (float) $p->attivita : 1;
+            $qtaEff = $isOrario
+                ? round(((float) $p->minuti) / 60, 3)
+                : round(((float) $p->qta) * $attivita, 3);
+            $imp = (float) $p->imponibile;
+            $tax = (float) $p->imposta;
+            $tot = $imp + $tax;
+            $sumImp += $imp; $sumTax += $tax; $sumTot += $tot;
+
+            DB::table('dorig')->insert([
+                'id_azienda'                  => $utente->id_azienda,
+                'id_utente'                   => $utente->id,
+                'id_cliente'                  => $i->id_cliente,
+                'id_dotes'                    => $id_dotes,
+                'id_testata'                  => $id_dotes,
+                'cd_do'                       => 'PRE',
+                'numero_doc'                  => $numero_doc,
+                'data_doc'                    => date('Y-m-d'),
+                'cd_ar'                       => $p->codice,
+                'n_riga'                      => $nRiga,
+                'descrizione'                 => $p->descrizione,
+                'qta'                         => $qtaEff,
+                'um'                          => $isOrario ? 'H' : 'PZ',
+                'pu'                          => (float) $p->pu,
+                'pt'                          => (float) $p->pt,
+                'prezzo_unitario'             => (float) $p->pu,
+                'prezzo_totale'               => (float) $p->pt,
+                'prezzo_totale_iva'           => $tot,
+                'iva'                         => (int) $p->aliquota,
+                'imponibile'                  => $imp,
+                'imposta'                     => $tax,
+                'totale'                      => $tot,
+                'servizio'                    => $p->servizio,
+                'setup_tank'                  => (int) $p->setup_tank,
+                'attivita'                    => $attivita,
+                'minuti'                      => (float) $p->minuti,
+                'materiale'                   => (float) $p->materiale,
+                'descrizione_materiale'       => $p->descrizione_materiale,
+                'id_vagone'                   => $i->id_vagone,
+                'id_lavorazione_origine'      => $p->id_lavorazione_origine,
+                'id_lavorazione_riga_origine' => $p->id_lavorazione_riga_origine,
+            ]);
+        }
+
+        // Aggiorna aggregati testata
+        if ($nRiga > 0) {
+            DB::table('dotes')->where('id', $id_dotes)->update([
+                'imponibile' => $sumImp,
+                'imposta'    => $sumTax,
+                'totale'     => $sumTot,
+            ]);
+        }
+
+        $note = 'Preventivo PRE #'.$numero_doc.' creato (dotes id '.$id_dotes.')';
+        if ($nRiga > 0) $note .= ' con '.$nRiga.' righe da proposte manutentore';
+        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 4, 'completato', $note);
+        return Redirect::to('utente/dettaglio_documento/'.$id_dotes)->with('success', 'Preventivo creato'.($nRiga > 0 ? ' con '.$nRiga.' righe pre-popolate dal report manutentore' : ', aggiungi le righe lavorazione').'.');
     }
 
     public function interventi_step_5_decisione($id, Request $request)
