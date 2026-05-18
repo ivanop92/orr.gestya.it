@@ -273,7 +273,9 @@
                                 </div>
                                 <p class="text-muted small mb-3">
                                     <i class="ri-information-line me-1"></i>
-                                    Queste righe verranno @if($intervento->id_dotes_preventivo)copiate@else automaticamente caricate@endif nel preventivo PRE allo step 4.
+                                    Queste righe verranno
+                                    @if($intervento->id_dotes_preventivo) copiate @else automaticamente caricate @endif
+                                    nel preventivo PRE allo step 4.
                                 </p>
                             @endif
 
