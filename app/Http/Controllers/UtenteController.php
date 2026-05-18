@@ -11790,8 +11790,12 @@ ORDER BY s.data_scadenza ASC',
             }
             foreach ($request->file('allegati') as $f) {
                 if (!$f || !$f->isValid()) continue;
+                // Cattura metadata PRIMA del move (dopo il move il file temp non esiste piu')
+                $originalName = $f->getClientOriginalName();
+                $mime = $f->getClientMimeType();
+                $size = $f->getSize();
                 $ext = $f->getClientOriginalExtension();
-                $base = pathinfo($f->getClientOriginalName(), PATHINFO_FILENAME);
+                $base = pathinfo($originalName, PATHINFO_FILENAME);
                 $safe = Str::slug($base) ?: 'allegato';
                 $fname = $safe.'_'.Str::random(8).'.'.$ext;
                 $f->move($dir, $fname);
@@ -11800,9 +11804,9 @@ ORDER BY s.data_scadenza ASC',
                     'id_azienda'    => $utente->id_azienda,
                     'id_utente'     => $utente->id,
                     'filename'      => 'uploads/interventi/'.$id.'/'.$fname,
-                    'original_name' => $f->getClientOriginalName(),
-                    'mime'          => $f->getClientMimeType(),
-                    'size'          => $f->getSize(),
+                    'original_name' => $originalName,
+                    'mime'          => $mime,
+                    'size'          => $size,
                     'created_at'    => date('Y-m-d H:i:s'),
                 ]);
             }
