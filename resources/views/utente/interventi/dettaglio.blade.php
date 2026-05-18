@@ -115,30 +115,108 @@
 
                         @if($intervento->stato === 'completato')
                             <div class="alert alert-success mb-0"><i class="ri-check-double-line me-1"></i> Intervento completato. Tutti gli step sono stati eseguiti.</div>
-                        @elseif($cur === 1)
-                            <p>Lo step di apertura è iniziato quando hai creato l'intervento. Conferma i dati nella sidebar a destra. Quando tutto è ok, clicca "Completa Step 1" per inviare l'intervento alla fase successiva.</p>
-                        @elseif($cur === 2)
-                            <p>Devi <strong>assegnare un manutentore</strong> per la valutazione. (UI assegnazione: prossima sessione)</p>
-                            <p class="text-muted small">Per ora: completa lo step quando hai comunicato verbalmente al manutentore.</p>
-                        @elseif($cur === 3)
-                            <p>Il manutentore sta valutando il vagone. (UI report danni + scarico magazzino: prossima sessione)</p>
-                        @elseif($cur === 4)
-                            <p>Il programma deve emettere il preventivo (e l'eventuale certificato). (Bottone "Crea Preventivo collegato": prossima sessione, intanto puoi crearlo manualmente da Documenti → PRE)</p>
-                        @elseif($cur === 5)
-                            <p>L'ufficio deve accettare o rifiutare il preventivo emesso. (UI accettazione: prossima sessione)</p>
-                        @elseif($cur === 6)
-                            <p>Il programma genera e invia la fattura. (UI emissione fattura: prossima sessione)</p>
-                        @endif
 
-                        @if($intervento->stato !== 'completato')
+                        @elseif($cur === 1)
+                            <p>Verifica i dati di apertura nella sidebar a destra. Quando tutto è ok clicca <strong>"Completa Step 1"</strong> per passare alla fase di assegnazione manutentore.</p>
                             <form method="post" action="/utente/interventi/{{ $intervento->id }}/completa_step" class="mt-3">
                                 @csrf
-                                <div class="mb-2">
-                                    <label class="form-label">Note di completamento (opzionali)</label>
-                                    <textarea name="note" class="form-control" rows="2" placeholder="cosa è stato fatto in questo step"></textarea>
+                                <button type="submit" class="btn btn-success" onclick="return confirm('Completare lo step 1?');">
+                                    <i class="ri-check-line me-1"></i> Completa Step 1 → vai allo Step 2
+                                </button>
+                            </form>
+
+                        @elseif($cur === 2)
+                            <p>Assegna il manutentore che dovrà valutare il vagone.</p>
+                            <form method="post" action="/utente/interventi/{{ $intervento->id }}/step2_assegna">
+                                @csrf
+                                <div class="mb-3">
+                                    <label class="form-label">Manutentore <b style="color:red">*</b></label>
+                                    <select name="id_operatore_assegnato" class="form-select" required>
+                                        <option value="">— Seleziona manutentore —</option>
+                                        @foreach($operatori as $op)
+                                            <option value="{{ $op->id }}" {{ $intervento->id_operatore_assegnato == $op->id ? 'selected' : '' }}>
+                                                {{ $op->nome }} {{ $op->cognome }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @if(count($operatori) === 0)
+                                        <small class="text-danger">Nessun operatore di produzione disponibile. Crealo prima in Anagrafiche → Dipendenti.</small>
+                                    @endif
                                 </div>
-                                <button type="submit" class="btn btn-success" onclick="return confirm('Confermi la chiusura dello step {{ $cur }}?');">
-                                    <i class="ri-check-line me-1"></i> Completa Step {{ $cur }} e passa al prossimo
+                                <button type="submit" class="btn btn-success">
+                                    <i class="ri-send-plane-line me-1"></i> Assegna e passa allo Step 3
+                                </button>
+                            </form>
+
+                        @elseif($cur === 3)
+                            <p>Il manutentore inserisce il <strong>report danni</strong> a seguito della valutazione del vagone.</p>
+                            <form method="post" action="/utente/interventi/{{ $intervento->id }}/step3_report">
+                                @csrf
+                                <div class="mb-3">
+                                    <label class="form-label">Report danni <b style="color:red">*</b></label>
+                                    <textarea name="report_danni" class="form-control" rows="6" required placeholder="Descrivi i danni rilevati, le parti da sostituire, lo stato del vagone...">{{ $intervento->report_danni }}</textarea>
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="ri-check-line me-1"></i> Invia report e passa allo Step 4
+                                </button>
+                            </form>
+
+                        @elseif($cur === 4)
+                            @if(!empty($intervento->report_danni))
+                                <div class="alert alert-light border mb-3">
+                                    <strong><i class="ri-tools-line me-1"></i>Report danni dal manutentore:</strong>
+                                    <p class="mb-0 mt-1 text-muted">{{ $intervento->report_danni }}</p>
+                                </div>
+                            @endif
+                            @if(!empty($intervento->motivo_rifiuto))
+                                <div class="alert alert-warning mb-3">
+                                    <strong>⚠️ Preventivo precedente rifiutato:</strong> {{ $intervento->motivo_rifiuto }}
+                                    <br><small>Rilavora e riemetti un nuovo preventivo.</small>
+                                </div>
+                            @endif
+                            <p>Emetti il preventivo collegato all'intervento. Cliente, vagone, motivo e report danni verranno pre-popolati. Aggiungerai le righe lavorazione dopo la creazione.</p>
+                            <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_preventivo">
+                                @csrf
+                                <button type="submit" class="btn btn-success" onclick="return confirm('Creare il preventivo collegato a questo intervento?');">
+                                    <i class="ri-file-add-line me-1"></i> Crea Preventivo Collegato
+                                </button>
+                            </form>
+
+                        @elseif($cur === 5)
+                            @if($intervento->id_dotes_preventivo)
+                                <div class="alert alert-info mb-3">
+                                    Preventivo emesso:
+                                    <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link">
+                                        Apri preventivo #{{ $intervento->id_dotes_preventivo }}
+                                    </a>
+                                </div>
+                            @endif
+                            <p>Decidi se accettare o rifiutare il preventivo.</p>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/step5_decisione">
+                                    @csrf
+                                    <input type="hidden" name="azione" value="accetta">
+                                    <button type="submit" class="btn btn-success" onclick="return confirm('Accettare il preventivo?');">
+                                        <i class="ri-check-line me-1"></i> Accetta → Step 6
+                                    </button>
+                                </form>
+                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modal_rifiuta_intervento">
+                                    <i class="ri-close-circle-line me-1"></i> Rifiuta
+                                </button>
+                            </div>
+
+                        @elseif($cur === 6)
+                            @if($intervento->id_dotes_preventivo)
+                                <div class="alert alert-success mb-3">
+                                    Preventivo accettato il {{ $intervento->accettato_il ? \Carbon\Carbon::parse($intervento->accettato_il)->format('d/m/Y H:i') : '' }} —
+                                    <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link">apri preventivo</a>
+                                </div>
+                            @endif
+                            <p>Genera la fattura dal preventivo accettato (via flusso Gestya esistente). Quando l'hai inviata, segna l'intervento come <strong>completato</strong>.</p>
+                            <form method="post" action="/utente/interventi/{{ $intervento->id }}/step6_fattura">
+                                @csrf
+                                <button type="submit" class="btn btn-success" onclick="return confirm('Confermi che la fattura è stata inviata?');">
+                                    <i class="ri-bill-line me-1"></i> Marca Fattura Inviata → Completa Intervento
                                 </button>
                             </form>
                         @endif
@@ -219,6 +297,32 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<div class="modal fade" id="modal_rifiuta_intervento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" action="/utente/interventi/{{ $intervento->id }}/step5_decisione">
+            @csrf
+            <input type="hidden" name="azione" value="rifiuta">
+            <div class="modal-content border-0">
+                <div class="modal-header bg-soft-danger p-3">
+                    <h5 class="modal-title">Rifiuta Preventivo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Indica il motivo del rifiuto. L'intervento tornerà allo Step 4 (Programma) per rilavorazione.</p>
+                    <label class="form-label">Motivo rifiuto <b style="color:red">*</b></label>
+                    <textarea name="motivo_rifiuto" class="form-control" rows="3" required placeholder="Spiega perché il preventivo è rifiutato"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="ri-close-circle-line me-1"></i> Conferma Rifiuto
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 

@@ -11866,6 +11866,168 @@ ORDER BY s.data_scadenza ASC',
         return Redirect::to('utente/interventi/'.$id)->with('success', 'Step '.$stepCorrente.' completato. Passa allo step '.$nuovoStep.'.');
     }
 
+    private function _intervento_avanza_step(int $id, int $id_azienda, int $id_utente, int $stepCorrente, string $azione = 'completato', ?string $note = null, ?int $forzaStep = null): void
+    {
+        $now = date('Y-m-d H:i:s');
+        $colStepCompletato = 'step_'.$stepCorrente.'_completato_il';
+        $nuovoStep = $forzaStep ?? ($stepCorrente < 6 ? $stepCorrente + 1 : 6);
+        $nuovoStato = ($stepCorrente === 6 && $azione === 'completato' && $forzaStep === null) ? 'completato' : 'in_corso';
+
+        $upd = [
+            'step_corrente' => $nuovoStep,
+            'stato'         => $nuovoStato,
+            'updated_at'    => $now,
+        ];
+        if ($azione === 'completato' || $azione === 'accettato') {
+            $upd[$colStepCompletato] = $now;
+        }
+
+        DB::table('interventi')->where('id', $id)->where('id_azienda', $id_azienda)->update($upd);
+        DB::table('interventi_log')->insert([
+            'id_intervento' => $id,
+            'id_azienda'    => $id_azienda,
+            'id_utente'     => $id_utente,
+            'step'          => $stepCorrente,
+            'azione'        => $azione,
+            'note'          => $note,
+            'created_at'    => $now,
+        ]);
+    }
+
+    public function interventi_step_2_assegna($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ((int) $i->step_corrente !== 2) return redirect()->back()->with('error', 'Non sei sullo step 2');
+
+        $id_operatore = (int) $request->input('id_operatore_assegnato', 0);
+        if ($id_operatore <= 0) return redirect()->back()->with('error', 'Seleziona un manutentore');
+
+        DB::table('interventi')->where('id', $id)->update(['id_operatore_assegnato' => $id_operatore]);
+        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 2, 'completato', 'Operatore assegnato (id #'.$id_operatore.')');
+        return Redirect::to('utente/interventi/'.$id)->with('success', 'Manutentore assegnato. Passa allo step 3.');
+    }
+
+    public function interventi_step_3_report($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ((int) $i->step_corrente !== 3) return redirect()->back()->with('error', 'Non sei sullo step 3');
+
+        $report = trim((string) $request->input('report_danni', ''));
+        if ($report === '') return redirect()->back()->with('error', 'Inserisci il report danni prima di completare');
+
+        DB::table('interventi')->where('id', $id)->update(['report_danni' => $report]);
+        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 3, 'completato', 'Report danni inviato');
+        return Redirect::to('utente/interventi/'.$id)->with('success', 'Report danni salvato. Passa allo step 4.');
+    }
+
+    public function interventi_step_4_emetti_preventivo($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ((int) $i->step_corrente !== 4) return redirect()->back()->with('error', 'Non sei sullo step 4');
+
+        // Snapshot cliente
+        $cliente = DB::table('clienti')->where('id', $i->id_cliente)->first();
+
+        // Numero progressivo PRE per anno + azienda
+        $maxNum = (int) DB::table('dotes')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('cd_do', 'PRE')
+            ->whereYear('data_doc', date('Y'))
+            ->max(DB::raw('CAST(numero_doc AS UNSIGNED)'));
+        $numero_doc = $maxNum + 1;
+
+        $id_dotes = DB::table('dotes')->insertGetId([
+            'cd_do'          => 'PRE',
+            'numero_doc'     => $numero_doc,
+            'data_doc'       => date('Y-m-d'),
+            'id_cliente'     => $i->id_cliente,
+            'id_azienda'     => $utente->id_azienda,
+            'id_utente'      => $utente->id,
+            'id_vagone'      => $i->id_vagone,
+            'automezzo'      => $i->automezzo,
+            'localita'       => $i->localita,
+            'reason_intake'  => $i->reason_intake,
+            'note_operatore' => $i->report_danni ?: $i->note,
+            'ragione_sociale'=> $cliente->ragione_sociale ?? null,
+            'partita_iva'    => $cliente->partita_iva ?? null,
+            'cf'             => $cliente->codice_fiscale ?? null,
+            'indirizzo'      => $cliente->indirizzo ?? null,
+            'cap'            => $cliente->cap ?? null,
+            'comune'         => $cliente->comune ?? null,
+            'provincia'      => $cliente->provincia ?? null,
+            'pec'            => $cliente->pec ?? null,
+            'sdi'            => $cliente->codice_sdi ?? null,
+            'imponibile'     => 0,
+            'imposta'        => 0,
+            'totale'         => 0,
+            'da_registrare'  => 0,
+        ]);
+
+        DB::table('interventi')->where('id', $id)->update(['id_dotes_preventivo' => $id_dotes]);
+        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 4, 'completato', 'Preventivo PRE #'.$numero_doc.' creato (dotes id '.$id_dotes.')');
+        return Redirect::to('utente/dettaglio_documento/'.$id_dotes)->with('success', 'Preventivo creato. Aggiungi le righe lavorazione qui. Quando hai finito, torna all\'intervento per la decisione ufficio.');
+    }
+
+    public function interventi_step_5_decisione($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ((int) $i->step_corrente !== 5) return redirect()->back()->with('error', 'Non sei sullo step 5');
+
+        $azione = $request->input('azione', '');
+        $now = date('Y-m-d H:i:s');
+
+        if ($azione === 'accetta') {
+            DB::table('interventi')->where('id', $id)->update([
+                'accettato_il'           => $now,
+                'accettato_da_id_utente' => $utente->id,
+                'rifiutato_il'           => null,
+                'motivo_rifiuto'         => null,
+            ]);
+            $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 5, 'accettato', 'Preventivo accettato');
+            return Redirect::to('utente/interventi/'.$id)->with('success', 'Preventivo accettato. Passa allo step 6 — invio fattura.');
+        }
+
+        if ($azione === 'rifiuta') {
+            $motivo = trim((string) $request->input('motivo_rifiuto', ''));
+            if ($motivo === '') return redirect()->back()->with('error', 'Inserisci il motivo del rifiuto');
+
+            DB::table('interventi')->where('id', $id)->update([
+                'rifiutato_il'   => $now,
+                'motivo_rifiuto' => $motivo,
+            ]);
+            // Torna allo step 4 per rilavorazione
+            $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 5, 'rifiutato', 'Rifiutato: '.$motivo, 4);
+            return Redirect::to('utente/interventi/'.$id)->with('error', 'Preventivo rifiutato. Torna allo step 4 per rilavorazione.');
+        }
+
+        return redirect()->back()->with('error', 'Azione non valida');
+    }
+
+    public function interventi_step_6_fattura($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ((int) $i->step_corrente !== 6) return redirect()->back()->with('error', 'Non sei sullo step 6');
+
+        DB::table('interventi')->where('id', $id)->update(['fattura_inviata_il' => date('Y-m-d H:i:s')]);
+        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 6, 'completato', 'Fattura inviata, intervento chiuso');
+        return Redirect::to('utente/interventi/'.$id)->with('success', 'Fattura segnata come inviata. Intervento completato!');
+    }
+
     public function ajax_catalogo_lavorazioni_righe(Request $request)
     {
         $this->is_loggato();
