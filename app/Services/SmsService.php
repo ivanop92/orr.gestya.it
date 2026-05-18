@@ -21,8 +21,8 @@ class SmsService
             return ['ok' => false, 'message' => 'Numero di telefono non valido'];
         }
 
-        // Provo formato E.164 (+39...) - il log ci dira' se l'API lo accetta o vuole senza +
-        $numeroApi = $numero;
+        // L'API rifiuta E.164 con '+', vuole il prefisso paese senza '+'
+        $numeroApi = ltrim($numero, '+');
 
         $payload = [
             'sender'     => $sender,
