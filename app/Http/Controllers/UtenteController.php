@@ -12173,8 +12173,33 @@ ORDER BY s.data_scadenza ASC',
             ->orderBy('nome')
             ->get();
 
+        // Dati prodotti dal manutentore: allegati, materiali (con info magazzino), righe lavorazione proposte
+        $allegati = DB::table('interventi_allegati')
+            ->where('id_intervento', $id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $materiali = DB::table('interventi_materiali as im')
+            ->leftJoin('articoli as a', 'a.id', '=', 'im.id_articolo')
+            ->leftJoin('mg', 'mg.id', '=', 'im.id_mg')
+            ->where('im.id_intervento', $id)
+            ->select(
+                'im.*',
+                'a.titolo as articolo_titolo',
+                'a.giacenza as articolo_giacenza_attuale',
+                'mg.descrizione as magazzino_descrizione'
+            )
+            ->orderBy('im.id')
+            ->get();
+
+        $proposte = DB::table('interventi_lavorazioni_proposte')
+            ->where('id_intervento', $id)
+            ->orderBy('ordinamento')
+            ->orderBy('id')
+            ->get();
+
         $page = 'interventi';
-        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'page'));
+        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'page'));
     }
 
     public function interventi_completa_step($id, Request $request)

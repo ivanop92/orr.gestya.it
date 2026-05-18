@@ -223,6 +223,123 @@
                     </div>
                 </div>
 
+                {{-- DATI DAL MANUTENTORE (visibili dopo step 3) --}}
+                @if((isset($proposte) && count($proposte) > 0) || (isset($materiali) && count($materiali) > 0) || (isset($allegati) && count($allegati) > 0))
+                    <div class="card">
+                        <div class="card-header bg-soft-warning">
+                            <h5 class="card-title mb-0"><i class="ri-tools-line me-2"></i>Dati dal manutentore</h5>
+                        </div>
+                        <div class="card-body">
+
+                            {{-- Righe lavorazione proposte --}}
+                            @if(count($proposte) > 0)
+                                <h6 class="mb-2"><i class="ri-list-check-2 me-1"></i>Lavorazioni proposte ({{ count($proposte) }})
+                                    @php $totProposte = $proposte->sum('pt'); @endphp
+                                    <small class="text-muted">— totale stimato € {{ number_format($totProposte,2,',','.') }}</small>
+                                </h6>
+                                <div class="table-responsive mb-3">
+                                    <table class="table table-sm table-bordered align-middle small">
+                                        <thead class="table-light">
+                                        <tr>
+                                            <th style="width:60px;">Servizio</th>
+                                            <th style="width:90px;">Codice</th>
+                                            <th>Descrizione</th>
+                                            <th class="text-end" style="width:70px;">Qta</th>
+                                            <th class="text-end" style="width:60px;">Min</th>
+                                            <th class="text-end" style="width:50px;">Att.</th>
+                                            <th class="text-end" style="width:80px;">P.U.</th>
+                                            <th class="text-end" style="width:60px;">IVA%</th>
+                                            <th class="text-end" style="width:90px;">Materiale</th>
+                                            <th class="text-end" style="width:90px;">Totale</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        @foreach($proposte as $p)
+                                            <tr>
+                                                <td>{{ $p->servizio }}</td>
+                                                <td>{{ $p->codice }}</td>
+                                                <td>{{ $p->descrizione }}</td>
+                                                <td class="text-end">{{ rtrim(rtrim(number_format($p->qta,3,',','.'),'0'),',') }}</td>
+                                                <td class="text-end">{{ rtrim(rtrim(number_format($p->minuti,2,',',''),'0'),',') ?: '—' }}</td>
+                                                <td class="text-end">{{ rtrim(rtrim(number_format($p->attivita,2,',',''),'0'),',') }}</td>
+                                                <td class="text-end">€ {{ number_format($p->pu,2,',','.') }}</td>
+                                                <td class="text-end">{{ $p->aliquota }}</td>
+                                                <td class="text-end">{{ $p->materiale > 0 ? '€ '.number_format($p->materiale,2,',','.') : '—' }}</td>
+                                                <td class="text-end fw-medium">€ {{ number_format($p->pt,2,',','.') }}</td>
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="text-muted small mb-3">
+                                    <i class="ri-information-line me-1"></i>
+                                    Queste righe verranno @if($intervento->id_dotes_preventivo)copiate@else automaticamente caricate@endif nel preventivo PRE allo step 4.
+                                </p>
+                            @endif
+
+                            {{-- Materiali scaricati --}}
+                            @if(count($materiali) > 0)
+                                <h6 class="mb-2"><i class="ri-box-3-line me-1"></i>Materiali utilizzati ({{ count($materiali) }})</h6>
+                                <div class="table-responsive mb-3">
+                                    <table class="table table-sm table-bordered align-middle small">
+                                        <thead class="table-light">
+                                        <tr>
+                                            <th style="width:90px;">Codice</th>
+                                            <th>Descrizione</th>
+                                            <th class="text-end" style="width:90px;">Qta</th>
+                                            <th style="width:60px;">UM</th>
+                                            <th style="width:130px;">Magazzino</th>
+                                            <th>Note</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        @foreach($materiali as $m)
+                                            <tr>
+                                                <td>{{ $m->codice }}</td>
+                                                <td>{{ $m->descrizione }}@if($m->articolo_titolo && $m->articolo_titolo != $m->descrizione) <small class="text-muted">({{ $m->articolo_titolo }})</small>@endif</td>
+                                                <td class="text-end">{{ rtrim(rtrim(number_format($m->qta,3,',','.'),'0'),',') }}</td>
+                                                <td>{{ $m->um }}</td>
+                                                <td>
+                                                    @if($m->id_mgmov)
+                                                        <span class="badge bg-success" title="Movimento {{ $m->id_mgmov }}"><i class="ri-store-2-line"></i> Scaricato</span>
+                                                        @if($m->magazzino_descrizione)<br><small class="text-muted">{{ $m->magazzino_descrizione }}</small>@endif
+                                                        @if($m->articolo_giacenza_attuale !== null)<br><small class="text-muted">Giac. attuale: {{ rtrim(rtrim(number_format($m->articolo_giacenza_attuale,3,',','.'),'0'),',') }}</small>@endif
+                                                    @else
+                                                        <span class="badge bg-secondary" title="Solo dichiarato dal manutentore">Manuale</span>
+                                                    @endif
+                                                </td>
+                                                <td><small>{{ $m->note }}</small></td>
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
+
+                            {{-- Allegati / Foto --}}
+                            @if(count($allegati) > 0)
+                                <h6 class="mb-2"><i class="ri-attachment-line me-1"></i>Allegati / Foto ({{ count($allegati) }})</h6>
+                                <div class="row g-2">
+                                    @foreach($allegati as $a)
+                                        <div class="col-3 col-md-2">
+                                            @if(strpos($a->mime ?? '', 'image/') === 0)
+                                                <a href="/{{ $a->filename }}" target="_blank">
+                                                    <img src="/{{ $a->filename }}" alt="" class="img-fluid rounded border" style="aspect-ratio:1; object-fit:cover; width:100%;">
+                                                </a>
+                                            @else
+                                                <a href="/{{ $a->filename }}" target="_blank" class="d-block text-center p-3 border rounded text-decoration-none" style="aspect-ratio:1;">
+                                                    <i class="ri-file-text-line" style="font-size:2rem;"></i>
+                                                    <div class="small text-truncate">{{ $a->original_name }}</div>
+                                                </a>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+
                 {{-- LOG --}}
                 <div class="card">
                     <div class="card-header">
