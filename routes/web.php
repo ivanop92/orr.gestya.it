@@ -40,6 +40,12 @@ Route::post('utente/lavorazioni/importa_csv',array('uses'=>'UtenteController@imp
 Route::any('utente/dettaglio_lavorazione/{id}',array('uses'=>'UtenteController@dettaglio_lavorazione'));
 Route::post('utente/ajax/ordina_righe_lavorazione/{id_lavorazione}',array('uses'=>'UtenteController@ordina_righe_lavorazione'));
 Route::get('utente/ajax/catalogo_lavorazioni_righe',array('uses'=>'UtenteController@ajax_catalogo_lavorazioni_righe'));
+
+// Interventi Manutenzione (workflow 6-step)
+Route::any('utente/interventi',array('uses'=>'UtenteController@interventi'));
+Route::any('utente/interventi/nuovo',array('uses'=>'UtenteController@interventi_nuovo'));
+Route::any('utente/interventi/{id}',array('uses'=>'UtenteController@interventi_dettaglio'));
+Route::post('utente/interventi/{id}/completa_step',array('uses'=>'UtenteController@interventi_completa_step'));
 Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));
 Route::post('utente/ajax/ordina_righe_documento/{id_dotes}',array('uses'=>'UtenteController@ordina_righe_documento'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));

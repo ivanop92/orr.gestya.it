@@ -58,10 +58,17 @@ $num_da_registrare = DB::select('SELECT ifnull(COUNT(id),0) AS num FROM dotes WH
                         </li>
                         <?php } ?>
                         <?php } ?>
-
                     </ul>
                 </div>
             </li>
+
+            <?php if (!empty($azienda->manut_workflow_accettazione_multistep) && $utente->id_tipologia != 1) { ?>
+            <li class="nav-item">
+                <a class="nav-link menu-link" href="/utente/interventi">
+                    <i class="ri-tools-line"></i> <span data-key="t-interventi">Interventi Manutenzione</span>
+                </a>
+            </li>
+            <?php } ?>
 
             <?php if ($utente->id_tipologia != 1) { // Queste sezioni solo per i non agenti ?>
             <li class="nav-item">

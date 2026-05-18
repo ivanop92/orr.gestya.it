@@ -11682,6 +11682,190 @@ ORDER BY s.data_scadenza ASC',
         return Redirect::to('utente/lavorazioni')->with('success', $msg);
     }
 
+    // ============================================================
+    // INTERVENTI MANUTENZIONE - workflow 6-step
+    // ============================================================
+
+    public function interventi(Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+
+        $q = trim((string) $request->input('q', ''));
+        $filtro_stato = $request->input('stato', '');
+
+        $query = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_ragione_sociale',
+                'v.codice as vagone_codice',
+                'op.nome as operatore_nome',
+                'op.cognome as operatore_cognome'
+            );
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('c.ragione_sociale', 'like', '%'.$q.'%')
+                  ->orWhere('v.codice', 'like', '%'.$q.'%')
+                  ->orWhere('i.automezzo', 'like', '%'.$q.'%')
+                  ->orWhere('i.reason_intake', 'like', '%'.$q.'%');
+            });
+        }
+        if ($filtro_stato !== '') {
+            $query->where('i.stato', $filtro_stato);
+        }
+
+        $interventi = $query
+            ->orderByDesc('i.created_at')
+            ->paginate(30)
+            ->appends($request->query());
+
+        $page = 'interventi';
+        return View::make('utente.interventi.index', compact('utente', 'interventi', 'q', 'filtro_stato', 'page'));
+    }
+
+    public function interventi_nuovo(Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        if (isset($dati['salva'])) {
+            $clean = function ($v) { return ($v === null || $v === '') ? null : $v; };
+            $id_vagone = !empty($dati['id_vagone']) ? (int) $dati['id_vagone'] : null;
+
+            $now = date('Y-m-d H:i:s');
+            $id_int = DB::table('interventi')->insertGetId([
+                'id_azienda'     => $utente->id_azienda,
+                'id_utente'      => $utente->id,
+                'id_cliente'     => !empty($dati['id_cliente']) ? (int) $dati['id_cliente'] : null,
+                'id_vagone'      => $id_vagone,
+                'automezzo'      => $clean($dati['automezzo'] ?? null),
+                'data_apertura'  => $clean($dati['data_apertura'] ?? null) ?: date('Y-m-d'),
+                'reason_intake'  => $clean($dati['reason_intake'] ?? null),
+                'localita'       => $clean($dati['localita'] ?? null),
+                'priorita'       => $dati['priorita'] ?? 'media',
+                'note'           => $clean($dati['note'] ?? null),
+                'step_corrente'  => 1, // step 1 in corso fino a quando non lo completi
+                'stato'          => 'in_corso',
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ]);
+
+            DB::table('interventi_log')->insert([
+                'id_intervento' => $id_int,
+                'id_azienda'    => $utente->id_azienda,
+                'id_utente'     => $utente->id,
+                'step'          => 1,
+                'azione'        => 'aperto',
+                'note'          => 'Intervento aperto',
+                'created_at'    => $now,
+            ]);
+
+            return Redirect::to('utente/interventi/'.$id_int)->with('success', 'Intervento aperto. Completa lo Step 1 quando hai inserito tutti i dati.');
+        }
+
+        $clienti = DB::table('clienti')->where('id_azienda', $utente->id_azienda)->orderBy('ragione_sociale')->get();
+        $vagoni  = DB::table('vagoni')->where('id_azienda', $utente->id_azienda)->where('attivo', 1)->orderBy('codice')->get();
+        $page = 'interventi';
+        return View::make('utente.interventi.nuovo', compact('utente', 'clienti', 'vagoni', 'page'));
+    }
+
+    public function interventi_dettaglio($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+
+        $intervento = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_ragione_sociale',
+                'c.indirizzo as cliente_indirizzo',
+                'c.comune as cliente_comune',
+                'v.codice as vagone_codice',
+                'v.tipo as vagone_tipo',
+                'op.nome as operatore_nome',
+                'op.cognome as operatore_cognome'
+            )
+            ->first();
+
+        if (!$intervento) {
+            return Redirect::to('utente/interventi')->with('error', 'Intervento non trovato');
+        }
+
+        $log = DB::table('interventi_log')
+            ->where('id_intervento', $id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $operatori = DB::table('utenti')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('id_tipologia', 2) // operatori produzione
+            ->orderBy('cognome')
+            ->orderBy('nome')
+            ->get();
+
+        $page = 'interventi';
+        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'page'));
+    }
+
+    public function interventi_completa_step($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $dati = $request->all();
+
+        $intervento = DB::table('interventi')
+            ->where('id', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->first();
+
+        if (!$intervento) {
+            return redirect()->back()->with('error', 'Intervento non trovato');
+        }
+
+        $stepCorrente = (int) $intervento->step_corrente;
+        if ($stepCorrente < 1 || $stepCorrente > 6) {
+            return redirect()->back()->with('error', 'Step corrente non valido');
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $colStepCompletato = 'step_'.$stepCorrente.'_completato_il';
+        $nuovoStep = $stepCorrente < 6 ? $stepCorrente + 1 : 6;
+        $nuovoStato = $stepCorrente === 6 ? 'completato' : 'in_corso';
+
+        DB::table('interventi')
+            ->where('id', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->update([
+                $colStepCompletato => $now,
+                'step_corrente'    => $nuovoStep,
+                'stato'            => $nuovoStato,
+                'updated_at'       => $now,
+            ]);
+
+        DB::table('interventi_log')->insert([
+            'id_intervento' => $id,
+            'id_azienda'    => $utente->id_azienda,
+            'id_utente'     => $utente->id,
+            'step'          => $stepCorrente,
+            'azione'        => 'completato',
+            'note'          => $dati['note'] ?? null,
+            'created_at'    => $now,
+        ]);
+
+        return Redirect::to('utente/interventi/'.$id)->with('success', 'Step '.$stepCorrente.' completato. Passa allo step '.$nuovoStep.'.');
+    }
+
     public function ajax_catalogo_lavorazioni_righe(Request $request)
     {
         $this->is_loggato();
