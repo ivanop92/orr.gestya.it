@@ -33,7 +33,10 @@
             <div class="nome"><i class="ri-tools-line me-1"></i>I miei interventi</div>
             <div class="small">{{ $utente->nome }} {{ $utente->cognome }}</div>
         </div>
-        <a href="/manutentore/logout" class="text-white text-decoration-none ms-2" title="Esci">
+        <a href="/manutentore/storico" class="text-white text-decoration-none ms-2 me-3" title="Storico">
+            <i class="ri-history-line" style="font-size: 1.4rem;"></i>
+        </a>
+        <a href="/manutentore/logout" class="text-white text-decoration-none" title="Esci">
             <i class="ri-logout-box-r-line" style="font-size: 1.4rem;"></i>
         </a>
     </div>

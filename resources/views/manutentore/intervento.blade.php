@@ -99,15 +99,36 @@
     @if($intervento->step_corrente == 3)
         <div class="step-info mb-3">
             <strong><i class="ri-pencil-line me-1"></i>Tocca a te</strong><br>
-            Valuta il vagone e scrivi il <strong>report danni</strong> qui sotto. Quando confermi, il documento passa all'ufficio per l'emissione del preventivo.
+            Valuta il vagone, scrivi il <strong>report danni</strong>, allega foto e indica i materiali utilizzati. Quando confermi, l'intervento passa all'ufficio.
         </div>
 
-        <form method="post" action="/manutentore/intervento/{{ $intervento->id }}/invia_report">
+        <form method="post" action="/manutentore/intervento/{{ $intervento->id }}/invia_report" enctype="multipart/form-data">
             @csrf
             <div class="card-info">
                 <div class="head"><i class="ri-tools-line me-1"></i>Report danni</div>
                 <div class="body">
-                    <textarea name="report_danni" class="form-control" rows="8" required placeholder="Descrivi i danni rilevati, le parti da sostituire, le lavorazioni necessarie...">{{ $intervento->report_danni }}</textarea>
+                    <textarea name="report_danni" class="form-control" rows="6" required placeholder="Descrivi i danni rilevati, le parti da sostituire, le lavorazioni necessarie...">{{ $intervento->report_danni }}</textarea>
+                </div>
+            </div>
+
+            <div class="card-info">
+                <div class="head"><i class="ri-camera-line me-1"></i>Foto / Allegati</div>
+                <div class="body">
+                    <input type="file" name="allegati[]" class="form-control" multiple accept="image/*,application/pdf" capture="environment">
+                    <small class="text-muted">Tocca per scattare foto o selezionare file dal dispositivo. Puoi caricare più foto in una volta.</small>
+                </div>
+            </div>
+
+            <div class="card-info">
+                <div class="head d-flex align-items-center">
+                    <span class="flex-grow-1"><i class="ri-box-3-line me-1"></i>Materiali utilizzati</span>
+                    <button type="button" class="btn btn-sm btn-soft-primary" onclick="aggiungiMateriale()"><i class="ri-add-line"></i> Riga</button>
+                </div>
+                <div class="body p-0">
+                    <div id="materiali_list" class="px-2 pb-2">
+                        {{-- Righe dinamiche --}}
+                    </div>
+                    <p class="text-muted small px-3 pb-2 mb-0">Aggiungi i materiali che hai usato. Codice articolo opzionale, descrizione obbligatoria. Lo scarico magazzino effettivo viene fatto dall'ufficio.</p>
                 </div>
             </div>
 
@@ -118,10 +139,42 @@
             </div>
         </form>
 
+        <script>
+            var materialeIdx = 0;
+            function aggiungiMateriale(prefill) {
+                materialeIdx++;
+                var i = materialeIdx;
+                prefill = prefill || {};
+                var html =
+                    '<div class="border rounded p-2 mb-2 bg-light position-relative" id="mat_row_'+i+'">' +
+                        '<button type="button" class="btn-close position-absolute top-0 end-0 m-2" onclick="document.getElementById(\'mat_row_'+i+'\').remove()" title="Rimuovi"></button>' +
+                        '<div class="row g-2">' +
+                            '<div class="col-12">' +
+                                '<label class="form-label mb-1 small">Descrizione *</label>' +
+                                '<input type="text" name="materiali['+i+'][descrizione]" class="form-control form-control-sm" placeholder="es. Suole freno Tipo X" required value="'+(prefill.descrizione||'')+'">' +
+                            '</div>' +
+                            '<div class="col-4">' +
+                                '<label class="form-label mb-1 small">Qta</label>' +
+                                '<input type="number" step="0.001" min="0" name="materiali['+i+'][qta]" class="form-control form-control-sm" value="'+(prefill.qta||1)+'">' +
+                            '</div>' +
+                            '<div class="col-3">' +
+                                '<label class="form-label mb-1 small">UM</label>' +
+                                '<input type="text" name="materiali['+i+'][um]" class="form-control form-control-sm" value="'+(prefill.um||'PZ')+'">' +
+                            '</div>' +
+                            '<div class="col-5">' +
+                                '<label class="form-label mb-1 small">Codice (opz.)</label>' +
+                                '<input type="text" name="materiali['+i+'][codice]" class="form-control form-control-sm" value="'+(prefill.codice||'')+'">' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                document.getElementById('materiali_list').insertAdjacentHTML('beforeend', html);
+            }
+        </script>
+
     @elseif($intervento->step_corrente < 3)
         <div class="step-info mb-3">
             <strong><i class="ri-time-line me-1"></i>In attesa</strong><br>
-            L'intervento è ancora in fase di apertura/assegnazione presso l'ufficio. Non c'è nulla da fare ora.
+            L'intervento è in fase di apertura/assegnazione presso l'ufficio. Non c'è nulla da fare ora.
         </div>
 
     @elseif($intervento->step_corrente > 3)
@@ -138,6 +191,64 @@
                 </div>
             </div>
         @endif
+    @endif
+
+    {{-- Allegati gia' caricati (visibili in tutti gli step >=3) --}}
+    @if(isset($allegati) && count($allegati) > 0)
+        <div class="card-info">
+            <div class="head"><i class="ri-attachment-line me-1"></i>Allegati ({{ count($allegati) }})</div>
+            <div class="body">
+                <div class="row g-2">
+                    @foreach($allegati as $a)
+                        <div class="col-4">
+                            @if(strpos($a->mime ?? '', 'image/') === 0)
+                                <a href="/{{ $a->filename }}" target="_blank">
+                                    <img src="/{{ $a->filename }}" alt="" class="img-fluid rounded" style="aspect-ratio:1; object-fit:cover;">
+                                </a>
+                            @else
+                                <a href="/{{ $a->filename }}" target="_blank" class="d-block text-center p-3 border rounded text-decoration-none">
+                                    <i class="ri-file-text-line" style="font-size:2rem;"></i>
+                                    <div class="small text-truncate">{{ $a->original_name }}</div>
+                                </a>
+                            @endif
+                            @if($intervento->step_corrente == 3)
+                                <form method="post" action="/manutentore/allegato/{{ $a->id }}/elimina" class="mt-1 d-grid">
+                                    @csrf
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Eliminare questo allegato?');">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Materiali gia' dichiarati --}}
+    @if(isset($materiali) && count($materiali) > 0)
+        <div class="card-info">
+            <div class="head"><i class="ri-box-3-line me-1"></i>Materiali utilizzati ({{ count($materiali) }})</div>
+            <div class="body p-0">
+                <ul class="list-group list-group-flush">
+                    @foreach($materiali as $m)
+                        <li class="list-group-item">
+                            <div class="d-flex">
+                                <div class="flex-grow-1">
+                                    <strong>{{ $m->descrizione }}</strong>
+                                    @if($m->codice) <small class="text-muted">[{{ $m->codice }}]</small>@endif
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-soft-primary text-primary">{{ rtrim(rtrim(number_format($m->qta,3,',','.'),'0'),',') }} {{ $m->um }}</span>
+                                </div>
+                            </div>
+                            @if($m->note)<div class="text-muted small mt-1">{{ $m->note }}</div>@endif
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
     @endif
 
 </div>

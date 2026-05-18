@@ -11745,7 +11745,17 @@ ORDER BY s.data_scadenza ASC',
             return Redirect::to('manutentore/dashboard')->with('error', 'Intervento non trovato o non assegnato a te');
         }
 
-        return View::make('manutentore.intervento', compact('utente', 'intervento'));
+        $allegati = DB::table('interventi_allegati')
+            ->where('id_intervento', $id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $materiali = DB::table('interventi_materiali')
+            ->where('id_intervento', $id)
+            ->orderBy('id')
+            ->get();
+
+        return View::make('manutentore.intervento', compact('utente', 'intervento', 'allegati', 'materiali'));
     }
 
     public function manutentore_invia_report($id, Request $request)
@@ -11771,9 +11781,105 @@ ORDER BY s.data_scadenza ASC',
         }
 
         DB::table('interventi')->where('id', $id)->update(['report_danni' => $report]);
+
+        // Upload foto/allegati (multi-file)
+        if ($request->hasFile('allegati')) {
+            $dir = public_path('uploads/interventi/'.$id);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            foreach ($request->file('allegati') as $f) {
+                if (!$f || !$f->isValid()) continue;
+                $ext = $f->getClientOriginalExtension();
+                $base = pathinfo($f->getClientOriginalName(), PATHINFO_FILENAME);
+                $safe = Str::slug($base) ?: 'allegato';
+                $fname = $safe.'_'.Str::random(8).'.'.$ext;
+                $f->move($dir, $fname);
+                DB::table('interventi_allegati')->insert([
+                    'id_intervento' => $id,
+                    'id_azienda'    => $utente->id_azienda,
+                    'id_utente'     => $utente->id,
+                    'filename'      => 'uploads/interventi/'.$id.'/'.$fname,
+                    'original_name' => $f->getClientOriginalName(),
+                    'mime'          => $f->getClientMimeType(),
+                    'size'          => $f->getSize(),
+                    'created_at'    => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
+
+        // Materiali consumati (righe ripetute dal form)
+        $materiali = $request->input('materiali', []);
+        if (is_array($materiali)) {
+            foreach ($materiali as $m) {
+                if (!is_array($m)) continue;
+                $descr = trim($m['descrizione'] ?? '');
+                if ($descr === '') continue;
+                DB::table('interventi_materiali')->insert([
+                    'id_intervento' => $id,
+                    'id_azienda'    => $utente->id_azienda,
+                    'id_utente'     => $utente->id,
+                    'codice'        => trim($m['codice'] ?? '') ?: null,
+                    'descrizione'   => $descr,
+                    'qta'           => (float) str_replace(',', '.', $m['qta'] ?? 0),
+                    'um'            => trim($m['um'] ?? 'PZ') ?: 'PZ',
+                    'note'          => trim($m['note'] ?? '') ?: null,
+                    'created_at'    => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
+
         $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 3, 'completato', 'Report danni inviato dal manutentore');
 
         return Redirect::to('manutentore/dashboard')->with('success', 'Report inviato. L\'intervento passa all\'ufficio per l\'emissione del preventivo.');
+    }
+
+    public function manutentore_storico(Request $request)
+    {
+        $utente = $this->_check_manutentore();
+
+        $interventi = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->where('i.id_operatore_assegnato', $utente->id)
+            ->where(function ($w) {
+                $w->where('i.stato', 'completato')
+                  ->orWhere('i.step_corrente', '>', 3); // gia' completato lo step 3
+            })
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_ragione_sociale',
+                'v.codice as vagone_codice'
+            )
+            ->orderByDesc('i.step_3_completato_il')
+            ->orderByDesc('i.created_at')
+            ->paginate(30);
+
+        return View::make('manutentore.storico', compact('utente', 'interventi'));
+    }
+
+    public function manutentore_elimina_allegato($id_allegato, Request $request)
+    {
+        $utente = $this->_check_manutentore();
+
+        $all = DB::table('interventi_allegati')
+            ->where('id', $id_allegato)
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('id_utente', $utente->id)
+            ->first();
+
+        if (!$all) {
+            return redirect()->back()->with('error', 'Allegato non trovato');
+        }
+
+        $path = public_path($all->filename);
+        if (file_exists($path)) {
+            @unlink($path);
+        }
+        DB::table('interventi_allegati')->where('id', $id_allegato)->delete();
+
+        return redirect()->back()->with('success', 'Allegato eliminato');
     }
 
     // ============================================================
