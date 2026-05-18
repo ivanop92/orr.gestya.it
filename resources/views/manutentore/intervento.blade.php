@@ -238,8 +238,9 @@
                 document.getElementById('lav_proposte_list').insertAdjacentHTML('beforeend', html);
             }
 
-            // Ricerca catalogo lavorazioni (AJAX server-side)
+            // Ricerca catalogo (AJAX server-side) - righe raggruppate per macro
             var ricercaTimer = null;
+            var righeCache = []; // ultimi risultati per "aggiungi macro intera"
             function ricercaCatalogo() {
                 clearTimeout(ricercaTimer);
                 ricercaTimer = setTimeout(function() {
@@ -254,28 +255,48 @@
                         .then(function(r){ return r.json(); })
                         .then(function(data) {
                             var righe = data.righe || [];
+                            righeCache = righe;
                             if (righe.length === 0) {
                                 resBox.innerHTML = '<div class="text-muted text-center py-3 small">Nessuna riga trovata.</div>';
                                 return;
                             }
-                            var html = '<div class="list-group list-group-flush">';
+                            // Raggruppa per id_lavorazione preservando l'ordine
+                            var gruppi = []; var seen = {};
                             righe.forEach(function(r) {
-                                var pt = parseFloat(r.pt || 0).toFixed(2).replace('.', ',');
-                                html += '<a href="#" class="list-group-item list-group-item-action" onclick="aggiungiDalCatalogo('+JSON.stringify(r).replace(/"/g, '&quot;')+'); return false;">' +
-                                    '<div class="d-flex"><div class="flex-grow-1">' +
-                                    '<strong>'+ (r.servizio||'') + '</strong> ' + (r.codice||'') + ' — ' + (r.descrizione||'') +
-                                    '<br><small class="text-muted">da ' + (r.lav_codice||'') + ' · ' + (r.lav_descrizione||'') + '</small>' +
-                                    '</div>' +
-                                    '<div class="text-end"><span class="badge bg-success">€ '+pt+'</span></div>' +
-                                    '</div></a>';
+                                if (!seen[r.id_lavorazione]) {
+                                    seen[r.id_lavorazione] = { id: r.id_lavorazione, codice: r.lav_codice, descrizione: r.lav_descrizione, righe: [] };
+                                    gruppi.push(seen[r.id_lavorazione]);
+                                }
+                                seen[r.id_lavorazione].righe.push(r);
                             });
-                            html += '</div>';
+                            var html = '';
+                            gruppi.forEach(function(g) {
+                                html += '<div class="border rounded mb-2">';
+                                // Header macro con bottone "aggiungi tutta"
+                                html += '<div class="d-flex align-items-center p-2 bg-light border-bottom">' +
+                                    '<div class="flex-grow-1"><strong>' + _esc(g.codice||'') + '</strong> — ' + _esc(g.descrizione||'') +
+                                    ' <small class="text-muted">(' + g.righe.length + ' righe)</small></div>' +
+                                    '<button type="button" class="btn btn-sm btn-success" onclick="aggiungiMacroIntera('+g.id+')"><i class="ri-add-line"></i> Tutta la macro</button>' +
+                                    '</div>';
+                                // Righe singole
+                                html += '<div class="list-group list-group-flush">';
+                                g.righe.forEach(function(r) {
+                                    var pt = parseFloat(r.pt || 0).toFixed(2).replace('.', ',');
+                                    html += '<a href="#" class="list-group-item list-group-item-action py-2" onclick="aggiungiSingolaDalCatalogo('+r.id+'); return false;">' +
+                                        '<div class="d-flex"><div class="flex-grow-1 small">' +
+                                        '<strong>'+ _esc(r.servizio||'') + '</strong> ' + _esc(r.codice||'') + ' — ' + _esc(r.descrizione||'') +
+                                        '</div>' +
+                                        '<div class="text-end"><span class="badge bg-soft-success text-success">€ '+pt+'</span></div>' +
+                                        '</div></a>';
+                                });
+                                html += '</div></div>';
+                            });
                             resBox.innerHTML = html;
                         })
                         .catch(function(){ resBox.innerHTML = '<div class="text-danger small text-center py-2">Errore ricerca</div>'; });
                 }, 300);
             }
-            function aggiungiDalCatalogo(r) {
+            function _addRigaDaObj(r) {
                 aggiungiLavorazione({
                     servizio: r.servizio || '',
                     codice: r.codice || '',
@@ -289,6 +310,17 @@
                     id_lavorazione_origine: r.id_lavorazione,
                     id_lavorazione_riga_origine: r.id,
                 });
+            }
+            function aggiungiSingolaDalCatalogo(idRiga) {
+                var r = righeCache.find(function(x){ return x.id === idRiga; });
+                if (!r) return;
+                _addRigaDaObj(r);
+                var modal = bootstrap.Modal.getInstance(document.getElementById('modal_cerca_lav'));
+                if (modal) modal.hide();
+            }
+            function aggiungiMacroIntera(idLav) {
+                var righe = righeCache.filter(function(x){ return x.id_lavorazione === idLav; });
+                righe.forEach(_addRigaDaObj);
                 var modal = bootstrap.Modal.getInstance(document.getElementById('modal_cerca_lav'));
                 if (modal) modal.hide();
             }
