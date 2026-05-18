@@ -193,13 +193,27 @@
                                     <br><small>Rilavora e riemetti un nuovo preventivo.</small>
                                 </div>
                             @endif
-                            <p>Emetti il preventivo collegato all'intervento. Cliente, vagone, motivo e report danni verranno pre-popolati. Aggiungerai le righe lavorazione dopo la creazione.</p>
-                            <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_preventivo">
-                                @csrf
-                                <button type="submit" class="btn btn-success" onclick="return confirm('Creare il preventivo collegato a questo intervento?');">
-                                    <i class="ri-file-add-line me-1"></i> Crea Preventivo Collegato
-                                </button>
-                            </form>
+                            @if($intervento->id_dotes_preventivo)
+                                <div class="alert alert-info">
+                                    Preventivo già emesso:
+                                    <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link">Apri</a> ·
+                                    <a href="/utente/modifica_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link"><i class="ri-pencil-line"></i> Modifica righe e prezzi</a>
+                                </div>
+                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/completa_step">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="ri-arrow-right-line me-1"></i> Passa allo Step 5
+                                    </button>
+                                </form>
+                            @else
+                                <p>Emetti il preventivo collegato all'intervento. Cliente, vagone, motivo e report danni verranno pre-popolati. Le righe vengono prese dalle lavorazioni proposte dal manutentore.</p>
+                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_preventivo">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success" onclick="return confirm('Creare il preventivo collegato a questo intervento?');">
+                                        <i class="ri-file-add-line me-1"></i> Crea Preventivo Collegato
+                                    </button>
+                                </form>
+                            @endif
 
                         @elseif($cur === 5)
                             @if($intervento->id_dotes_preventivo)
@@ -248,13 +262,45 @@
                                     <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link">apri preventivo</a>
                                 </div>
                             @endif
-                            <p>Genera la fattura dal preventivo accettato (via flusso Gestya esistente). Quando l'hai inviata, segna l'intervento come <strong>completato</strong>.</p>
-                            <form method="post" action="/utente/interventi/{{ $intervento->id }}/step6_fattura">
-                                @csrf
-                                <button type="submit" class="btn btn-success" onclick="return confirm('Confermi che la fattura è stata inviata?');">
-                                    <i class="ri-bill-line me-1"></i> Marca Fattura Inviata → Completa Intervento
-                                </button>
-                            </form>
+
+                            @if(!$intervento->id_dotes_fattura)
+                                <p>Crea la fattura dal preventivo accettato. Le righe verranno copiate e potrai modificarle prima di emetterla.</p>
+                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/step6_crea_fattura">
+                                    @csrf
+                                    <button type="submit" class="btn btn-primary btn-lg">
+                                        <i class="ri-file-text-line me-1"></i> Crea Fattura dal Preventivo
+                                    </button>
+                                </form>
+                            @else
+                                <div class="alert alert-info mb-3">
+                                    Fattura emessa:
+                                    <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_fattura }}" class="alert-link">Apri</a> ·
+                                    <a href="/utente/modifica_documento/{{ $intervento->id_dotes_fattura }}" class="alert-link"><i class="ri-pencil-line"></i> Modifica righe e prezzi</a>
+                                </div>
+
+                                <div class="d-flex flex-wrap gap-2 mb-3">
+                                    <a href="/utente/interventi/{{ $intervento->id }}/fattura/pdf" class="btn btn-soft-primary" target="_blank">
+                                        <i class="ri-file-pdf-line me-1"></i> Scarica PDF Fattura
+                                    </a>
+                                    <a href="/utente/interventi/{{ $intervento->id }}/fattura/xml" class="btn btn-soft-info" target="_blank">
+                                        <i class="ri-file-code-line me-1"></i> Scarica XML SDI
+                                    </a>
+                                    <button type="button" class="btn btn-soft-secondary" disabled title="Funzionalità in arrivo">
+                                        <i class="ri-send-plane-line me-1"></i> Invia SDI <small>(in arrivo)</small>
+                                    </button>
+                                </div>
+
+                                @if(empty($intervento->fattura_inviata_il))
+                                    <hr>
+                                    <p class="text-muted small mb-2">Quando hai inviato la fattura (manualmente o via SDI), segna l'intervento come completato:</p>
+                                    <form method="post" action="/utente/interventi/{{ $intervento->id }}/step6_completa">
+                                        @csrf
+                                        <button type="submit" class="btn btn-success" onclick="return confirm('Confermi la chiusura dell\'intervento?');">
+                                            <i class="ri-check-double-line me-1"></i> Marca Inviata → Completa Intervento
+                                        </button>
+                                    </form>
+                                @endif
+                            @endif
                         @endif
                     </div>
                 </div>

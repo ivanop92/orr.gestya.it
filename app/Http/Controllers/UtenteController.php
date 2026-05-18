@@ -12750,7 +12750,250 @@ ORDER BY s.data_scadenza ASC',
         return redirect()->back()->with('error', 'Azione non valida');
     }
 
-    public function interventi_step_6_fattura($id, Request $request)
+    public function interventi_step_6_crea_fattura($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ((int) $i->step_corrente !== 6) return redirect()->back()->with('error', 'Non sei sullo step 6');
+        if (!$i->id_dotes_preventivo) return redirect()->back()->with('error', 'Nessun preventivo collegato da cui creare la fattura');
+        if ($i->id_dotes_fattura) return redirect()->back()->with('error', 'Fattura gia\' creata');
+
+        $prev = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->first();
+        if (!$prev) return redirect()->back()->with('error', 'Preventivo non trovato');
+
+        // Numero progressivo FTV per anno + azienda
+        $maxNum = (int) DB::table('dotes')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('cd_do', 'FTV')
+            ->whereYear('data_doc', date('Y'))
+            ->max(DB::raw('CAST(numero_doc AS UNSIGNED)'));
+        $numero_doc = $maxNum + 1;
+
+        // Crea FTV con snapshot dal preventivo
+        $id_ftv = DB::table('dotes')->insertGetId([
+            'cd_do'           => 'FTV',
+            'tipologia_documento' => 'TD01',
+            'numero_doc'      => $numero_doc,
+            'data_doc'        => date('Y-m-d'),
+            'id_cliente'      => $prev->id_cliente,
+            'id_azienda'      => $utente->id_azienda,
+            'id_utente'       => $utente->id,
+            'id_vagone'       => $prev->id_vagone ?? null,
+            'automezzo'       => $prev->automezzo ?? null,
+            'localita'        => $prev->localita ?? null,
+            'reason_intake'   => $prev->reason_intake ?? null,
+            'note_operatore'  => $prev->note_operatore ?? null,
+            'ragione_sociale' => $prev->ragione_sociale,
+            'partita_iva'     => $prev->partita_iva,
+            'cf'              => $prev->cf,
+            'indirizzo'       => $prev->indirizzo,
+            'cap'             => $prev->cap,
+            'comune'          => $prev->comune,
+            'provincia'       => $prev->provincia,
+            'pec'             => $prev->pec,
+            'sdi'             => $prev->sdi,
+            'imponibile'      => $prev->imponibile,
+            'imposta'         => $prev->imposta,
+            'totale'          => $prev->totale,
+            'da_registrare'   => 0,
+        ]);
+
+        // Copia tutte le righe da dorig PRE a dorig FTV
+        $righe = DB::table('dorig')->where('id_dotes', $prev->id)->orderBy('n_riga')->get();
+        $nRiga = 0;
+        foreach ($righe as $r) {
+            $nRiga++;
+            DB::table('dorig')->insert([
+                'id_azienda'                  => $utente->id_azienda,
+                'id_utente'                   => $utente->id,
+                'id_cliente'                  => $prev->id_cliente,
+                'id_dotes'                    => $id_ftv,
+                'id_testata'                  => $id_ftv,
+                'cd_do'                       => 'FTV',
+                'numero_doc'                  => $numero_doc,
+                'data_doc'                    => date('Y-m-d'),
+                'cd_ar'                       => $r->cd_ar,
+                'n_riga'                      => $nRiga,
+                'descrizione'                 => $r->descrizione,
+                'qta'                         => $r->qta,
+                'um'                          => $r->um,
+                'pu'                          => $r->pu,
+                'pt'                          => $r->pt,
+                'prezzo_unitario'             => $r->prezzo_unitario,
+                'prezzo_totale'               => $r->prezzo_totale,
+                'iva'                         => $r->iva,
+                'imponibile'                  => $r->imponibile,
+                'imposta'                     => $r->imposta,
+                'totale'                      => $r->totale,
+                'servizio'                    => $r->servizio,
+                'setup_tank'                  => $r->setup_tank,
+                'attivita'                    => $r->attivita,
+                'minuti'                      => $r->minuti,
+                'materiale'                   => $r->materiale,
+                'descrizione_materiale'       => $r->descrizione_materiale,
+                'id_vagone'                   => $r->id_vagone,
+                'id_lavorazione_origine'      => $r->id_lavorazione_origine,
+                'id_lavorazione_riga_origine' => $r->id_lavorazione_riga_origine,
+            ]);
+        }
+
+        DB::table('interventi')->where('id', $id)->update(['id_dotes_fattura' => $id_ftv]);
+        DB::table('interventi_log')->insert([
+            'id_intervento' => $id,
+            'id_azienda'    => $utente->id_azienda,
+            'id_utente'     => $utente->id,
+            'step'          => 6,
+            'azione'        => 'fattura_creata',
+            'note'          => 'Fattura FTV #'.$numero_doc.' creata dal preventivo (dotes id '.$id_ftv.', '.$nRiga.' righe copiate)',
+            'created_at'    => date('Y-m-d H:i:s'),
+        ]);
+
+        return Redirect::to('utente/modifica_documento/'.$id_ftv)->with('success', 'Fattura creata. Modifica le righe se serve, poi torna all\'intervento per generare PDF/XML.');
+    }
+
+    public function interventi_fattura_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i || !$i->id_dotes_fattura) abort(404, 'Fattura non trovata');
+
+        $dotes = DB::table('dotes')->where('id', $i->id_dotes_fattura)->first();
+        $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_fattura)->orderBy('n_riga')->get();
+        $az    = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4',
+            'margin_left' => 12, 'margin_right' => 12,
+            'margin_top' => 14,  'margin_bottom' => 14,
+            'default_font' => 'helvetica',
+            'default_font_size' => 9,
+        ]);
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $eur = function ($v) { return '&euro; '.number_format((float) $v, 2, ',', '.'); };
+
+        $html = '<style>
+            body { font-family: helvetica, sans-serif; color: #222; }
+            h1 { color: #1e40af; font-size: 22px; margin: 0; }
+            .header-tbl { width: 100%; margin-bottom: 14px; }
+            .header-tbl td { vertical-align: top; padding: 0; }
+            .box { border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; }
+            .label { color: #6b7280; font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+            table.righe { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9px; }
+            table.righe th { background: #1e40af; color: #fff; padding: 6px 4px; text-align: left; font-size: 8px; }
+            table.righe td { padding: 5px 4px; border-bottom: 1px solid #e5e7eb; }
+            table.righe tr:nth-child(even) td { background: #f9fafb; }
+            .totali { width: 280px; margin-left: auto; margin-top: 12px; }
+            .totali td { padding: 4px 8px; }
+            .totali .grand { border-top: 2px solid #1e40af; font-size: 14px; padding-top: 8px; color: #1e40af; font-weight: bold; }
+            .footer { margin-top: 24px; font-size: 8px; color: #888; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+        </style>';
+        $html .= '<h1>FATTURA</h1>';
+        $html .= '<p style="margin:4px 0 14px;color:#6b7280;">N. <strong>'.$esc($dotes->numero_doc).'/'.date('Y', strtotime($dotes->data_doc)).'</strong> del '.date('d/m/Y', strtotime($dotes->data_doc)).'</p>';
+        $html .= '<table class="header-tbl"><tr>
+            <td width="48%"><div class="box">
+                <div class="label">Cedente</div>
+                <div><strong>'.$esc($az->ragione_sociale ?? '').'</strong></div>
+                <div>'.$esc($az->indirizzo ?? '').'<br>'.$esc($az->cap ?? '').' '.$esc($az->comune ?? '').' ('.$esc($az->provincia ?? '').')</div>
+                '.(!empty($az->partita_iva) ? '<div style="color:#666;font-size:8px;">P.IVA '.$esc($az->partita_iva).'</div>' : '').'
+            </div></td>
+            <td width="4%"></td>
+            <td width="48%"><div class="box">
+                <div class="label">Cessionario</div>
+                <div><strong>'.$esc($dotes->ragione_sociale).'</strong></div>
+                <div>'.$esc($dotes->indirizzo).'<br>'.$esc($dotes->cap).' '.$esc($dotes->comune).' ('.$esc($dotes->provincia).')</div>
+                '.(!empty($dotes->partita_iva) ? '<div style="color:#666;font-size:8px;">P.IVA '.$esc($dotes->partita_iva).'</div>' : '').'
+            </div></td>
+        </tr></table>';
+        $html .= '<table class="righe"><thead><tr>
+            <th width="4%">#</th><th width="10%">Codice</th><th width="46%">Descrizione</th>
+            <th width="10%" style="text-align:right">Qta</th>
+            <th width="10%" style="text-align:right">P.U.</th>
+            <th width="6%" style="text-align:right">IVA%</th>
+            <th width="14%" style="text-align:right">Totale</th>
+        </tr></thead><tbody>';
+        $n = 0;
+        foreach ($dorig as $r) {
+            $n++;
+            $html .= '<tr>
+                <td>'.$n.'</td>
+                <td>'.$esc($r->cd_ar).'</td>
+                <td>'.$esc($r->descrizione ?: $r->nome_prodotto).'</td>
+                <td style="text-align:right">'.rtrim(rtrim(number_format($r->qta, 3, ',', '.'), '0'), ',').' '.$esc($r->um).'</td>
+                <td style="text-align:right">'.$eur($r->prezzo_unitario).'</td>
+                <td style="text-align:right">'.$r->iva.'</td>
+                <td style="text-align:right;font-weight:bold">'.$eur($r->prezzo_totale).'</td>
+            </tr>';
+        }
+        $html .= '</tbody></table>';
+        $html .= '<table class="totali">
+            <tr><td>Imponibile</td><td style="text-align:right">'.$eur($dotes->imponibile).'</td></tr>
+            <tr><td>Imposta</td><td style="text-align:right">'.$eur($dotes->imposta).'</td></tr>
+            <tr class="grand"><td>TOTALE FATTURA</td><td style="text-align:right">'.$eur($dotes->totale).'</td></tr>
+        </table>';
+        $html .= '<div class="footer">Documento generato il '.date('d/m/Y H:i').' tramite Gestya</div>';
+
+        $mpdf->WriteHTML($html);
+        return $mpdf->Output('fattura_'.$dotes->numero_doc.'.pdf', 'D'); // download
+    }
+
+    public function interventi_fattura_xml($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$i || !$i->id_dotes_fattura) abort(404, 'Fattura non trovata');
+
+        $dotes = DB::table('dotes')->where('id', $i->id_dotes_fattura)->first();
+        $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_fattura)->orderBy('n_riga')->get();
+        $az    = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        // XML SDI FPR12 minimal (lo stesso template del vecchio sw ORR adattato)
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'."\n";
+        $xml .= '<p:FatturaElettronica versione="FPR12" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2 http://www.fatturapa.gov.it/export/fatturazione/sdi/fatturapa/v1.2/Schema_del_file_xml_FatturaPA_versione_1.2.xsd">'."\n";
+        $xml .= '<FatturaElettronicaHeader>';
+        $xml .= '<DatiTrasmissione><IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>'.($az->partita_iva ?? '').'</IdCodice></IdTrasmittente><ProgressivoInvio>'.$dotes->id.'</ProgressivoInvio><FormatoTrasmissione>FPR12</FormatoTrasmissione><CodiceDestinatario>'.($dotes->sdi ?: '0000000').'</CodiceDestinatario>';
+        if (!empty($dotes->pec)) $xml .= '<PECDestinatario>'.htmlspecialchars($dotes->pec).'</PECDestinatario>';
+        $xml .= '</DatiTrasmissione>';
+        $xml .= '<CedentePrestatore><DatiAnagrafici><IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>'.($az->partita_iva ?? '').'</IdCodice></IdFiscaleIVA><Anagrafica><Denominazione>'.htmlspecialchars($az->ragione_sociale ?? '').'</Denominazione></Anagrafica><RegimeFiscale>'.($az->regime_fiscale ?? 'RF01').'</RegimeFiscale></DatiAnagrafici><Sede><Indirizzo>'.htmlspecialchars($az->indirizzo ?? '').'</Indirizzo><CAP>'.($az->cap ?? '').'</CAP><Comune>'.htmlspecialchars($az->comune ?? '').'</Comune><Provincia>'.($az->provincia ?? '').'</Provincia><Nazione>IT</Nazione></Sede></CedentePrestatore>';
+        $xml .= '<CessionarioCommittente><DatiAnagrafici>';
+        if (!empty($dotes->partita_iva)) $xml .= '<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>'.htmlspecialchars($dotes->partita_iva).'</IdCodice></IdFiscaleIVA>';
+        if (!empty($dotes->cf)) $xml .= '<CodiceFiscale>'.htmlspecialchars($dotes->cf).'</CodiceFiscale>';
+        $xml .= '<Anagrafica><Denominazione>'.htmlspecialchars($dotes->ragione_sociale).'</Denominazione></Anagrafica></DatiAnagrafici><Sede><Indirizzo>'.htmlspecialchars($dotes->indirizzo).'</Indirizzo><CAP>'.htmlspecialchars($dotes->cap).'</CAP><Comune>'.htmlspecialchars($dotes->comune).'</Comune><Provincia>'.htmlspecialchars($dotes->provincia).'</Provincia><Nazione>IT</Nazione></Sede></CessionarioCommittente>';
+        $xml .= '</FatturaElettronicaHeader>';
+        $xml .= '<FatturaElettronicaBody>';
+        $xml .= '<DatiGenerali><DatiGeneraliDocumento><TipoDocumento>'.($dotes->tipologia_documento ?: 'TD01').'</TipoDocumento><Divisa>EUR</Divisa><Data>'.date('Y-m-d', strtotime($dotes->data_doc)).'</Data><Numero>'.htmlspecialchars($dotes->numero_doc).'/'.date('Y', strtotime($dotes->data_doc)).'</Numero><ImportoTotaleDocumento>'.number_format($dotes->totale, 2, '.', '').'</ImportoTotaleDocumento></DatiGeneraliDocumento></DatiGenerali>';
+        $xml .= '<DatiBeniServizi>';
+        $n = 0;
+        foreach ($dorig as $r) {
+            $n++;
+            $pu = $r->iva > 0 ? round($r->prezzo_unitario / (1 + $r->iva / 100), 4) : (float) $r->prezzo_unitario;
+            $pt = $r->iva > 0 ? round($r->prezzo_totale  / (1 + $r->iva / 100), 4) : (float) $r->prezzo_totale;
+            $xml .= '<DettaglioLinee>';
+            $xml .= '<NumeroLinea>'.$n.'</NumeroLinea>';
+            $xml .= '<Descrizione>'.htmlspecialchars(substr($r->descrizione ?: $r->nome_prodotto, 0, 100)).'</Descrizione>';
+            $xml .= '<Quantita>'.number_format($r->qta, 3, '.', '').'</Quantita>';
+            $xml .= '<UnitaMisura>'.htmlspecialchars($r->um ?: 'NR').'</UnitaMisura>';
+            $xml .= '<PrezzoUnitario>'.number_format($pu, 4, '.', '').'</PrezzoUnitario>';
+            $xml .= '<PrezzoTotale>'.number_format($pt, 4, '.', '').'</PrezzoTotale>';
+            $xml .= '<AliquotaIVA>'.number_format($r->iva, 2, '.', '').'</AliquotaIVA>';
+            $xml .= '</DettaglioLinee>';
+        }
+        $xml .= '<DatiRiepilogo><AliquotaIVA>22.00</AliquotaIVA><ImponibileImporto>'.number_format($dotes->imponibile, 2, '.', '').'</ImponibileImporto><Imposta>'.number_format($dotes->imposta, 2, '.', '').'</Imposta><EsigibilitaIVA>I</EsigibilitaIVA></DatiRiepilogo>';
+        $xml .= '</DatiBeniServizi>';
+        $xml .= '</FatturaElettronicaBody>';
+        $xml .= '</p:FatturaElettronica>';
+
+        $filename = 'IT'.($az->partita_iva ?? '00000000000').'_'.str_pad(dechex($dotes->id), 5, '0', STR_PAD_LEFT).'.xml';
+        return response($xml, 200, [
+            'Content-Type'        => 'application/xml; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    public function interventi_step_6_completa($id, Request $request)
     {
         $this->is_loggato();
         $utente = session('utente');
@@ -12761,6 +13004,12 @@ ORDER BY s.data_scadenza ASC',
         DB::table('interventi')->where('id', $id)->update(['fattura_inviata_il' => date('Y-m-d H:i:s')]);
         $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 6, 'completato', 'Fattura inviata, intervento chiuso');
         return Redirect::to('utente/interventi/'.$id)->with('success', 'Fattura segnata come inviata. Intervento completato!');
+    }
+
+    public function interventi_step_6_fattura($id, Request $request)
+    {
+        // Backward compatibility: vecchio endpoint -> ora "completa"
+        return $this->interventi_step_6_completa($id, $request);
     }
 
     public function ajax_catalogo_lavorazioni_righe(Request $request)

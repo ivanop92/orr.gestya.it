@@ -58,6 +58,10 @@ Route::post('firma/{token}/invia_otp',array('uses'=>'FirmaController@invia_otp')
 Route::post('firma/{token}/verifica_otp',array('uses'=>'FirmaController@verifica_otp'));
 Route::post('firma/{token}/segnala',array('uses'=>'FirmaController@segnala'));
 Route::post('utente/interventi/{id}/step6_fattura',array('uses'=>'UtenteController@interventi_step_6_fattura'));
+Route::post('utente/interventi/{id}/step6_crea_fattura',array('uses'=>'UtenteController@interventi_step_6_crea_fattura'));
+Route::post('utente/interventi/{id}/step6_completa',array('uses'=>'UtenteController@interventi_step_6_completa'));
+Route::get('utente/interventi/{id}/fattura/pdf',array('uses'=>'UtenteController@interventi_fattura_pdf'));
+Route::get('utente/interventi/{id}/fattura/xml',array('uses'=>'UtenteController@interventi_fattura_xml'));
 
 // Dashboard Manutentore (responsive smartphone/tablet)
 Route::any('manutentore/dashboard',array('uses'=>'UtenteController@manutentore_dashboard'));
