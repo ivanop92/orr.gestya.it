@@ -193,24 +193,59 @@
                                     <br><small>Rilavora e riemetti un nuovo preventivo.</small>
                                 </div>
                             @endif
-                            @if($intervento->id_dotes_preventivo)
-                                <div class="alert alert-info">
-                                    Preventivo già emesso:
-                                    <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link">Apri</a> ·
-                                    <a href="/utente/modifica_documento/{{ $intervento->id_dotes_preventivo }}" class="alert-link"><i class="ri-pencil-line"></i> Modifica righe e prezzi</a>
+                            <p>Emetti il <strong>preventivo</strong> (con prezzi) e il <strong>certificato di manutenzione</strong> (dichiarazione tecnica). Le righe vengono prese dalle lavorazioni proposte dal manutentore.</p>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h6 class="mb-2"><i class="ri-file-text-line me-1 text-success"></i>Preventivo</h6>
+                                            @if($intervento->id_dotes_preventivo)
+                                                <p class="mb-2 small text-success"><i class="ri-check-line"></i> Già emesso</p>
+                                                <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="btn btn-sm btn-soft-primary">Apri</a>
+                                                <a href="/utente/modifica_documento/{{ $intervento->id_dotes_preventivo }}" class="btn btn-sm btn-soft-warning"><i class="ri-pencil-line"></i> Modifica</a>
+                                            @else
+                                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_preventivo">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Creare il preventivo?');">
+                                                        <i class="ri-file-add-line me-1"></i>Crea Preventivo
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h6 class="mb-2"><i class="ri-shield-check-line me-1 text-info"></i>Certificato di Manutenzione</h6>
+                                            @if($intervento->id_dotes_certificato)
+                                                <p class="mb-2 small text-success"><i class="ri-check-line"></i> Già emesso</p>
+                                                <a href="/utente/interventi/{{ $intervento->id }}/certificato/pdf" class="btn btn-sm btn-soft-primary" target="_blank">
+                                                    <i class="ri-file-pdf-line"></i> Scarica PDF
+                                                </a>
+                                                <a href="/utente/modifica_documento/{{ $intervento->id_dotes_certificato }}" class="btn btn-sm btn-soft-warning"><i class="ri-pencil-line"></i> Modifica</a>
+                                            @else
+                                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_certificato">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-info" onclick="return confirm('Creare il certificato di manutenzione?');" {{ !$intervento->id_dotes_preventivo ? 'disabled' : '' }}>
+                                                        <i class="ri-shield-check-line me-1"></i>Crea Certificato
+                                                    </button>
+                                                </form>
+                                                @if(!$intervento->id_dotes_preventivo)
+                                                    <small class="text-muted d-block mt-1">Crea prima il preventivo</small>
+                                                @endif
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            @if($intervento->id_dotes_preventivo)
                                 <form method="post" action="/utente/interventi/{{ $intervento->id }}/completa_step">
                                     @csrf
                                     <button type="submit" class="btn btn-success">
                                         <i class="ri-arrow-right-line me-1"></i> Passa allo Step 5
-                                    </button>
-                                </form>
-                            @else
-                                <p>Emetti il preventivo collegato all'intervento. Cliente, vagone, motivo e report danni verranno pre-popolati. Le righe vengono prese dalle lavorazioni proposte dal manutentore.</p>
-                                <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_preventivo">
-                                    @csrf
-                                    <button type="submit" class="btn btn-success" onclick="return confirm('Creare il preventivo collegato a questo intervento?');">
-                                        <i class="ri-file-add-line me-1"></i> Crea Preventivo Collegato
                                     </button>
                                 </form>
                             @endif

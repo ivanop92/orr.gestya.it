@@ -49,6 +49,8 @@ Route::post('utente/interventi/{id}/completa_step',array('uses'=>'UtenteControll
 Route::post('utente/interventi/{id}/step2_assegna',array('uses'=>'UtenteController@interventi_step_2_assegna'));
 Route::post('utente/interventi/{id}/step3_report',array('uses'=>'UtenteController@interventi_step_3_report'));
 Route::post('utente/interventi/{id}/step4_emetti_preventivo',array('uses'=>'UtenteController@interventi_step_4_emetti_preventivo'));
+Route::post('utente/interventi/{id}/step4_emetti_certificato',array('uses'=>'UtenteController@interventi_step_4_emetti_certificato'));
+Route::get('utente/interventi/{id}/certificato/pdf',array('uses'=>'UtenteController@interventi_certificato_pdf'));
 Route::post('utente/interventi/{id}/step5_decisione',array('uses'=>'UtenteController@interventi_step_5_decisione'));
 Route::post('utente/interventi/{id}/invia_preventivo_email',array('uses'=>'UtenteController@interventi_invia_preventivo_email'));
 

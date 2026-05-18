@@ -12712,6 +12712,232 @@ ORDER BY s.data_scadenza ASC',
         }
     }
 
+    public function interventi_step_4_emetti_certificato($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select('i.*', 'c.ragione_sociale as cliente_ragione_sociale')
+            ->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if ($i->id_dotes_certificato) return redirect()->back()->with('error', 'Certificato gia\' creato');
+
+        $cliente = DB::table('clienti')->where('id', $i->id_cliente)->first();
+
+        // Numero progressivo CERT per anno + azienda
+        $maxNum = (int) DB::table('dotes')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('cd_do', 'CERT')
+            ->whereYear('data_doc', date('Y'))
+            ->max(DB::raw('CAST(numero_doc AS UNSIGNED)'));
+        $numero_doc = $maxNum + 1;
+
+        $id_cert = DB::table('dotes')->insertGetId([
+            'cd_do'          => 'CERT',
+            'numero_doc'     => $numero_doc,
+            'data_doc'       => date('Y-m-d'),
+            'id_cliente'     => $i->id_cliente,
+            'id_azienda'     => $utente->id_azienda,
+            'id_utente'      => $utente->id,
+            'id_vagone'      => $i->id_vagone,
+            'automezzo'      => $i->automezzo,
+            'localita'       => $i->localita,
+            'reason_intake'  => $i->reason_intake,
+            'note_operatore' => $i->report_danni ?: $i->note,
+            'ragione_sociale'=> $cliente->ragione_sociale ?? null,
+            'partita_iva'    => $cliente->partita_iva ?? null,
+            'cf'             => $cliente->codice_fiscale ?? null,
+            'indirizzo'      => $cliente->indirizzo ?? null,
+            'cap'            => $cliente->cap ?? null,
+            'comune'         => $cliente->comune ?? null,
+            'provincia'      => $cliente->provincia ?? null,
+            'imponibile'     => 0,
+            'imposta'        => 0,
+            'totale'         => 0,
+            'da_registrare'  => 0,
+        ]);
+
+        // Copia righe dal preventivo se esiste (le lavorazioni eseguite finiscono anche sul certificato)
+        if ($i->id_dotes_preventivo) {
+            $righePrev = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
+            $nRiga = 0;
+            foreach ($righePrev as $r) {
+                $nRiga++;
+                DB::table('dorig')->insert([
+                    'id_azienda'            => $utente->id_azienda,
+                    'id_utente'             => $utente->id,
+                    'id_cliente'            => $i->id_cliente,
+                    'id_dotes'              => $id_cert,
+                    'id_testata'            => $id_cert,
+                    'cd_do'                 => 'CERT',
+                    'numero_doc'            => $numero_doc,
+                    'data_doc'              => date('Y-m-d'),
+                    'cd_ar'                 => $r->cd_ar,
+                    'n_riga'                => $nRiga,
+                    'descrizione'           => $r->descrizione,
+                    'qta'                   => $r->qta,
+                    'um'                    => $r->um,
+                    'pu'                    => $r->pu,
+                    'pt'                    => $r->pt,
+                    'prezzo_unitario'       => $r->prezzo_unitario,
+                    'prezzo_totale'         => $r->prezzo_totale,
+                    'iva'                   => $r->iva,
+                    'imponibile'            => $r->imponibile,
+                    'imposta'               => $r->imposta,
+                    'totale'                => $r->totale,
+                    'servizio'              => $r->servizio,
+                    'setup_tank'            => $r->setup_tank,
+                    'attivita'              => $r->attivita,
+                    'minuti'                => $r->minuti,
+                    'materiale'             => $r->materiale,
+                    'descrizione_materiale' => $r->descrizione_materiale,
+                    'id_vagone'             => $r->id_vagone,
+                ]);
+            }
+        }
+
+        DB::table('interventi')->where('id', $id)->update(['id_dotes_certificato' => $id_cert]);
+        DB::table('interventi_log')->insert([
+            'id_intervento' => $id,
+            'id_azienda'    => $utente->id_azienda,
+            'id_utente'     => $utente->id,
+            'step'          => 4,
+            'azione'        => 'certificato_creato',
+            'note'          => 'Certificato di Manutenzione CERT #'.$numero_doc.' creato (dotes id '.$id_cert.')',
+            'created_at'    => date('Y-m-d H:i:s'),
+        ]);
+
+        return Redirect::to('utente/interventi/'.$id)->with('success', 'Certificato di Manutenzione creato. Puoi scaricarlo in PDF dallo step 4.');
+    }
+
+    public function interventi_certificato_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select('i.*', 'c.ragione_sociale as cliente_rs', 'c.indirizzo as cliente_ind', 'c.comune as cliente_com', 'v.codice as vagone_codice', 'v.tipo as vagone_tipo', 'v.numero_uic as vagone_uic', 'op.nome as op_nome', 'op.cognome as op_cognome')
+            ->first();
+        if (!$i || !$i->id_dotes_certificato) abort(404, 'Certificato non trovato');
+
+        $dotes = DB::table('dotes')->where('id', $i->id_dotes_certificato)->first();
+        $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_certificato)->orderBy('n_riga')->get();
+        $az    = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4',
+            'margin_left' => 14, 'margin_right' => 14,
+            'margin_top' => 16,  'margin_bottom' => 16,
+            'default_font' => 'helvetica', 'default_font_size' => 10,
+        ]);
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $dataIntervento = $i->data_apertura ? date('d/m/Y', strtotime($i->data_apertura)) : '—';
+        $dataCertificato = date('d/m/Y', strtotime($dotes->data_doc));
+        $manutentoreLabel = $i->op_nome ? trim($i->op_nome.' '.$i->op_cognome) : '—';
+
+        $html = '<style>
+            body { font-family: helvetica, sans-serif; color: #222; }
+            .title { text-align:center; color:#065f46; font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; }
+            .subtitle { text-align:center; color:#6b7280; font-size: 11px; margin: 0 0 16px; }
+            .doc-num { text-align:center; font-size: 12px; margin-bottom: 14px; }
+            .box { border: 1px solid #d1d5db; border-radius: 4px; padding: 10px; margin-bottom: 12px; }
+            .label { color: #6b7280; font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+            .h2 { color:#065f46; font-size: 13px; font-weight: bold; margin: 14px 0 6px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+            table.righe { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 9px; }
+            table.righe th { background: #065f46; color: #fff; padding: 6px 4px; text-align: left; font-size: 8px; }
+            table.righe td { padding: 5px 4px; border-bottom: 1px solid #e5e7eb; }
+            .declar { font-size: 10px; line-height: 1.5; text-align: justify; margin-top: 12px; }
+            .firma { margin-top: 30px; }
+            .firma td { vertical-align: bottom; }
+            .firma-line { border-top: 1px solid #999; padding-top: 4px; font-size: 9px; color:#6b7280; }
+            .footer { margin-top: 24px; font-size: 8px; color: #888; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+        </style>';
+        $html .= '<div class="title">CERTIFICATO DI MANUTENZIONE</div>';
+        $html .= '<div class="subtitle">Dichiarazione di esecuzione lavori di manutenzione su rotabile ferroviario</div>';
+        $html .= '<div class="doc-num">Documento n. <strong>'.$esc($dotes->numero_doc).'/'.date('Y', strtotime($dotes->data_doc)).'</strong> del '.$dataCertificato.'</div>';
+
+        $html .= '<table class="header-tbl" width="100%"><tr>
+            <td width="48%"><div class="box">
+                <div class="label">Officina manutentrice</div>
+                <div><strong>'.$esc($az->ragione_sociale ?? '').'</strong></div>
+                <div>'.$esc($az->indirizzo ?? '').'<br>'.$esc($az->cap ?? '').' '.$esc($az->comune ?? '').' ('.$esc($az->provincia ?? '').')</div>
+                '.(!empty($az->partita_iva) ? '<div style="font-size:8px;color:#666;">P.IVA '.$esc($az->partita_iva).'</div>' : '').'
+            </div></td>
+            <td width="4%"></td>
+            <td width="48%"><div class="box">
+                <div class="label">Cliente</div>
+                <div><strong>'.$esc($dotes->ragione_sociale).'</strong></div>
+                <div>'.$esc($dotes->indirizzo).'<br>'.$esc($dotes->cap).' '.$esc($dotes->comune).' ('.$esc($dotes->provincia).')</div>
+                '.(!empty($dotes->partita_iva) ? '<div style="font-size:8px;color:#666;">P.IVA '.$esc($dotes->partita_iva).'</div>' : '').'
+            </div></td>
+        </tr></table>';
+
+        $html .= '<div class="h2">Dati dell\'intervento</div>';
+        $html .= '<div class="box">
+            <table width="100%"><tr>
+                <td width="50%"><div class="label">Vagone</div><strong>'.$esc($i->vagone_codice ?: $i->automezzo ?: '—').'</strong>'.($i->vagone_tipo ? ' <span style="color:#666;">('.$esc($i->vagone_tipo).')</span>' : '').'</td>
+                <td width="50%"><div class="label">Numero UIC</div>'.$esc($i->vagone_uic ?: '—').'</td>
+            </tr><tr>
+                <td><div class="label">Data apertura intervento</div>'.$dataIntervento.'</td>
+                <td><div class="label">Località</div>'.$esc($i->localita ?: '—').'</td>
+            </tr><tr>
+                <td><div class="label">Manutentore responsabile</div>'.$esc($manutentoreLabel).'</td>
+                <td><div class="label">Motivo del rientro</div>'.$esc($i->reason_intake ?: '—').'</td>
+            </tr></table>
+        </div>';
+
+        if ($i->report_danni) {
+            $html .= '<div class="h2">Report danni rilevati</div>';
+            $html .= '<div class="box" style="white-space:pre-wrap;">'.$esc($i->report_danni).'</div>';
+        }
+
+        $html .= '<div class="h2">Lavorazioni eseguite</div>';
+        $html .= '<table class="righe"><thead><tr>
+            <th width="6%">#</th><th width="10%">Serv.</th><th width="14%">Codice</th>
+            <th>Descrizione</th><th width="10%" style="text-align:right">Qta</th><th width="10%" style="text-align:right">Minuti</th>
+        </tr></thead><tbody>';
+        if (count($dorig) > 0) {
+            $n = 0;
+            foreach ($dorig as $r) {
+                $n++;
+                $minTxt = (float) $r->minuti > 0 ? rtrim(rtrim(number_format($r->minuti, 2, ',', ''), '0'), ',') : '—';
+                $html .= '<tr>
+                    <td>'.$n.'</td>
+                    <td>'.$esc($r->servizio).'</td>
+                    <td>'.$esc($r->cd_ar).'</td>
+                    <td>'.$esc($r->descrizione).'</td>
+                    <td style="text-align:right">'.rtrim(rtrim(number_format($r->qta, 3, ',', '.'), '0'), ',').' '.$esc($r->um).'</td>
+                    <td style="text-align:right">'.$minTxt.'</td>
+                </tr>';
+            }
+        } else {
+            $html .= '<tr><td colspan="6" style="text-align:center;color:#999;">Nessuna riga di lavorazione registrata</td></tr>';
+        }
+        $html .= '</tbody></table>';
+
+        $html .= '<div class="declar">';
+        $html .= '<p><strong>Dichiarazione.</strong> Si dichiara che le lavorazioni di manutenzione sopra elencate sono state eseguite a regola d\'arte presso le officine di '.$esc($az->ragione_sociale ?? '').' nel rispetto delle normative tecniche vigenti applicabili al rotabile ferroviario sopra identificato, e che il mezzo è stato verificato e trovato idoneo all\'esercizio per quanto di competenza dell\'intervento.</p>';
+        $html .= '</div>';
+
+        $html .= '<table class="firma" width="100%"><tr>
+            <td width="48%"><div class="firma-line">Manutentore responsabile<br><strong style="color:#222;">'.$esc($manutentoreLabel).'</strong></div></td>
+            <td width="4%"></td>
+            <td width="48%"><div class="firma-line">Per accettazione cliente<br>(timbro e firma)</div></td>
+        </tr></table>';
+
+        $html .= '<div class="footer">Documento generato il '.date('d/m/Y H:i').' tramite Gestya · Certificato n. '.$esc($dotes->numero_doc).'/'.date('Y', strtotime($dotes->data_doc)).'</div>';
+
+        $mpdf->WriteHTML($html);
+        return $mpdf->Output('certificato_manutenzione_'.$dotes->numero_doc.'.pdf', 'D');
+    }
+
     public function interventi_step_5_decisione($id, Request $request)
     {
         $this->is_loggato();
