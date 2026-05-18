@@ -12523,7 +12523,7 @@ ORDER BY s.data_scadenza ASC',
             $mail->isHTML(true);
             $mail->Subject = $oggetto;
             $mail->Body = $bodyHtml;
-            $mail->AltBody = strip_tags($messaggio."\n\n".$linkPdf."\n\n".$firma);
+            $mail->AltBody = strip_tags($messaggio."\n\n".$linkFirma."\n\n".$firma);
 
             // Allega PDF (mPDF) con layout professionale
             try {
