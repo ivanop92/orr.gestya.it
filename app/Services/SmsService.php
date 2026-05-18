@@ -24,10 +24,9 @@ class SmsService
         // L'API rifiuta E.164 con '+', vuole il prefisso paese senza '+'
         $numeroApi = ltrim($numero, '+');
 
-        // messaggisms vuole un array di oggetti con 'msisdn' (numero senza '+')
         $payload = [
             'sender'     => $sender,
-            'recipients' => [['msisdn' => $numeroApi]],
+            'recipients' => [['phone' => $numeroApi]],
             'body'       => $messaggio,
         ];
 
