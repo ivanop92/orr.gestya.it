@@ -27,7 +27,7 @@ class SmsService
         $payload = [
             'sender'    => $sender,
             'recipient' => $numeroApi,
-            'message'   => $messaggio,
+            'body'      => $messaggio,
         ];
 
         try {
