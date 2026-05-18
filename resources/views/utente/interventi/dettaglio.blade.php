@@ -73,6 +73,25 @@
             </div>
         @endif
 
+        @if(isset($segnalazioni_cliente) && count($segnalazioni_cliente) > 0)
+            @foreach($segnalazioni_cliente as $seg)
+                <div class="alert alert-warning border-warning">
+                    <div class="d-flex align-items-start">
+                        <i class="ri-error-warning-fill text-warning me-2" style="font-size:1.5rem;"></i>
+                        <div class="flex-grow-1">
+                            <strong>Segnalazione dal cliente</strong>
+                            <small class="text-muted ms-2">{{ \Carbon\Carbon::parse($seg->created_at)->format('d/m/Y H:i') }}</small>
+                            <p class="mb-1 mt-1" style="white-space:pre-wrap;">{{ $seg->testo }}</p>
+                            @if($seg->contatto)
+                                <small><i class="ri-phone-line me-1"></i><strong>Contatto fornito:</strong> {{ $seg->contatto }}</small><br>
+                            @endif
+                            <small class="text-muted">Consiglio: ricontattare il cliente per chiarire prima di proseguire.</small>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        @endif
+
         {{-- STEPPER --}}
         <div class="card">
             <div class="card-body">

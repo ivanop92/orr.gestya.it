@@ -56,6 +56,7 @@ Route::post('utente/interventi/{id}/invia_preventivo_email',array('uses'=>'Utent
 Route::get('firma/{token}',array('uses'=>'FirmaController@preventivo'));
 Route::post('firma/{token}/invia_otp',array('uses'=>'FirmaController@invia_otp'));
 Route::post('firma/{token}/verifica_otp',array('uses'=>'FirmaController@verifica_otp'));
+Route::post('firma/{token}/segnala',array('uses'=>'FirmaController@segnala'));
 Route::post('utente/interventi/{id}/step6_fattura',array('uses'=>'UtenteController@interventi_step_6_fattura'));
 
 // Dashboard Manutentore (responsive smartphone/tablet)

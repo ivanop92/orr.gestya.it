@@ -70,6 +70,44 @@ class FirmaController extends Controller
     }
 
     /**
+     * Il cliente segnala un problema con il preventivo (no firma, no OTP).
+     */
+    public function segnala($token, Request $request)
+    {
+        $dotes = DB::table('dotes')->where('firma_token', $token)->first();
+        if (!$dotes) return response()->json(['ok' => false, 'error' => 'Preventivo non trovato'], 404);
+
+        $testo    = trim((string) $request->input('testo', ''));
+        $contatto = trim((string) $request->input('contatto', ''));
+        if ($testo === '') return response()->json(['ok' => false, 'error' => 'Inserisci una descrizione del problema']);
+
+        DB::table('dotes_segnalazioni')->insert([
+            'id_dotes'   => $dotes->id,
+            'id_azienda' => $dotes->id_azienda,
+            'testo'      => $testo,
+            'contatto'   => $contatto ?: null,
+            'ip'         => $request->ip(),
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        // Log anche sull'intervento collegato
+        $intervento = DB::table('interventi')->where('id_dotes_preventivo', $dotes->id)->first();
+        if ($intervento) {
+            DB::table('interventi_log')->insert([
+                'id_intervento' => $intervento->id,
+                'id_azienda'    => $intervento->id_azienda,
+                'id_utente'     => null,
+                'step'          => $intervento->step_corrente,
+                'azione'        => 'segnalazione_cliente',
+                'note'          => 'Cliente ha segnalato un problema: '.\Illuminate\Support\Str::limit($testo, 200).($contatto ? ' [contatto: '.$contatto.']' : ''),
+                'created_at'    => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Segnalazione inviata. Verrai ricontattato a breve.']);
+    }
+
+    /**
      * Verifica l'OTP e marca il preventivo come firmato.
      */
     public function verifica_otp($token, Request $request)

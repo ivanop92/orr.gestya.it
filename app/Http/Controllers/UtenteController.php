@@ -12166,11 +12166,16 @@ ORDER BY s.data_scadenza ASC',
 
         // Stato firma cliente sul preventivo collegato (se presente)
         $firma_preventivo = null;
+        $segnalazioni_cliente = collect();
         if ($intervento->id_dotes_preventivo) {
             $firma_preventivo = DB::table('dotes')
                 ->where('id', $intervento->id_dotes_preventivo)
                 ->select('firma_token', 'firmato_il', 'firmato_da_nome', 'firma_telefono', 'firma_ip', 'firma_otp_inviato_il')
                 ->first();
+            $segnalazioni_cliente = DB::table('dotes_segnalazioni')
+                ->where('id_dotes', $intervento->id_dotes_preventivo)
+                ->orderByDesc('created_at')
+                ->get();
         }
 
         $log = DB::table('interventi_log')
@@ -12213,7 +12218,7 @@ ORDER BY s.data_scadenza ASC',
             ->get();
 
         $page = 'interventi';
-        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'firma_utente', 'firma_preventivo', 'page'));
+        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'firma_utente', 'firma_preventivo', 'segnalazioni_cliente', 'page'));
     }
 
     public function interventi_completa_step($id, Request $request)

@@ -121,6 +121,11 @@
             <div><strong>{{ $dotes->firmato_da_nome }}</strong> ha firmato questo preventivo il <strong>{{ \Carbon\Carbon::parse($dotes->firmato_il)->format('d/m/Y H:i') }}</strong></div>
             <div class="small text-muted mt-1">Firma digitale via SMS OTP (numero {{ $dotes->firma_telefono }}, IP {{ $dotes->firma_ip }})</div>
         </div>
+        <div class="text-center my-3">
+            <button type="button" class="btn btn-link text-muted btn-sm" onclick="document.getElementById('segnalazione_box').scrollIntoView({behavior:'smooth'})">
+                <i class="ri-error-warning-line me-1"></i>Hai un problema con questo preventivo? Segnalalo
+            </button>
+        </div>
     @else
         <div class="doc-card firma-box">
             <h5 class="mb-3"><i class="ri-pen-nib-line me-1"></i>Firma il preventivo</h5>
@@ -161,6 +166,27 @@
             </div>
         </div>
     @endif
+
+    {{-- SEGNALA UN PROBLEMA --}}
+    <div class="doc-card" id="segnalazione_box" style="background:#fff7ed; border:1px solid #fdba74;">
+        <h6 class="mb-2"><i class="ri-error-warning-line text-warning me-1"></i>Hai un problema con il preventivo?</h6>
+        <p class="small text-muted mb-2">Se la firma non funziona o hai un dubbio su qualcosa, segnalacelo. Ti ricontatteremo a breve.</p>
+        <div id="segnala_form">
+            <div class="mb-2">
+                <textarea id="seg_testo" class="form-control" rows="3" placeholder="Descrivi il problema: cosa hai trovato che non va, cosa non torna nel preventivo, oppure un problema con la firma SMS..."></textarea>
+            </div>
+            <div class="mb-2">
+                <input type="text" id="seg_contatto" class="form-control" placeholder="Il tuo contatto (telefono o email) — opzionale">
+            </div>
+            <button type="button" class="btn btn-warning" onclick="inviaSegnalazione()">
+                <i class="ri-send-plane-line me-1"></i> Invia segnalazione
+            </button>
+            <div id="err_segnala" class="text-danger small mt-2" style="display:none;"></div>
+        </div>
+        <div id="segnala_done" style="display:none;" class="alert alert-success mt-2 mb-0">
+            <i class="ri-check-line me-1"></i> Segnalazione inviata. L'ufficio è stato avvisato.
+        </div>
+    </div>
 
 </div>
 
@@ -211,6 +237,27 @@
     function tornaTelefono() {
         document.getElementById('step_otp').style.display = 'none';
         document.getElementById('step_telefono').style.display = 'block';
+    }
+
+    async function inviaSegnalazione() {
+        const testo = document.getElementById('seg_testo').value.trim();
+        const contatto = document.getElementById('seg_contatto').value.trim();
+        const err = document.getElementById('err_segnala');
+        err.style.display = 'none';
+        if (!testo) { err.textContent = 'Scrivi una descrizione del problema'; err.style.display = 'block'; return; }
+        try {
+            const fd = new FormData();
+            fd.append('testo', testo);
+            fd.append('contatto', contatto);
+            fd.append('_token', @json(csrf_token()));
+            const r = await fetch('/firma/'+TOKEN+'/segnala', { method:'POST', body: fd, credentials:'same-origin' });
+            const data = await r.json();
+            if (!data.ok) { err.textContent = data.error || 'Errore'; err.style.display = 'block'; return; }
+            document.getElementById('segnala_form').style.display = 'none';
+            document.getElementById('segnala_done').style.display = 'block';
+        } catch (e) {
+            err.textContent = 'Errore di rete: ' + e; err.style.display = 'block';
+        }
     }
 </script>
 
