@@ -11819,20 +11819,62 @@ ORDER BY s.data_scadenza ASC',
         }
 
         // Materiali consumati (righe ripetute dal form)
+        // Se id_articolo presente -> crea movimento di scarico mgmov + aggiorna giacenza articolo
         $materiali = $request->input('materiali', []);
         if (is_array($materiali)) {
+            // Magazzino di default per scarichi: prima is_default=1, altrimenti il primo
+            $mgDefault = DB::table('mg')->where('id_azienda', $utente->id_azienda)->where('is_default', 1)->first();
+            if (!$mgDefault) {
+                $mgDefault = DB::table('mg')->where('id_azienda', $utente->id_azienda)->first();
+            }
+            $id_mg_default = $mgDefault ? $mgDefault->id : null;
+
             foreach ($materiali as $m) {
                 if (!is_array($m)) continue;
                 $descr = trim($m['descrizione'] ?? '');
                 if ($descr === '') continue;
+
+                $id_articolo = !empty($m['id_articolo']) ? (int) $m['id_articolo'] : null;
+                $qta = (float) str_replace(',', '.', $m['qta'] ?? 0);
+                $um  = trim($m['um'] ?? 'PZ') ?: 'PZ';
+                $id_mg = $id_articolo ? $id_mg_default : null;
+                $id_mgmov = null;
+
+                // Se l'articolo e' agganciato al magazzino: crea movimento di scarico
+                if ($id_articolo && $id_mg && $qta > 0) {
+                    $articolo = DB::table('articoli')->where('id', $id_articolo)->where('id_azienda', $utente->id_azienda)->first();
+                    if ($articolo) {
+                        $id_mgmov = DB::table('mgmov')->insertGetId([
+                            'id_azienda'      => $utente->id_azienda,
+                            'id_mg'           => $id_mg,
+                            'id_articolo'     => $id_articolo,
+                            'qta'             => $qta,
+                            'sca'             => 1,
+                            'car'             => 0,
+                            'ret'             => 0,
+                            'ini'             => 0,
+                            'datamov'         => date('Y-m-d H:i:s'),
+                            'causale'         => 'Scarico per Intervento #'.$id.' (manutentore)',
+                            'id_utente'       => $utente->id,
+                            'prezzo_unitario' => $articolo->prezzo ?? 0,
+                            'imponibile'      => ($articolo->prezzo ?? 0) * $qta,
+                        ]);
+                        // Aggiorna giacenza articolo (decremento)
+                        DB::table('articoli')->where('id', $id_articolo)->decrement('giacenza', $qta);
+                    }
+                }
+
                 DB::table('interventi_materiali')->insert([
                     'id_intervento' => $id,
                     'id_azienda'    => $utente->id_azienda,
                     'id_utente'     => $utente->id,
+                    'id_articolo'   => $id_articolo,
+                    'id_mg'         => $id_mg,
+                    'id_mgmov'      => $id_mgmov,
                     'codice'        => trim($m['codice'] ?? '') ?: null,
                     'descrizione'   => $descr,
-                    'qta'           => (float) str_replace(',', '.', $m['qta'] ?? 0),
-                    'um'            => trim($m['um'] ?? 'PZ') ?: 'PZ',
+                    'qta'           => $qta,
+                    'um'            => $um,
                     'note'          => trim($m['note'] ?? '') ?: null,
                     'created_at'    => date('Y-m-d H:i:s'),
                 ]);
@@ -11919,6 +11961,28 @@ ORDER BY s.data_scadenza ASC',
             ->paginate(30);
 
         return View::make('manutentore.storico', compact('utente', 'interventi'));
+    }
+
+    public function manutentore_search_articoli(Request $request)
+    {
+        $utente = $this->_check_manutentore();
+        $q = trim((string) $request->input('q', ''));
+        if (mb_strlen($q) < 2) {
+            return response()->json(['articoli' => []]);
+        }
+        $articoli = DB::table('articoli')
+            ->where('id_azienda', $utente->id_azienda)
+            ->where(function ($w) use ($q) {
+                $w->where('codice_articolo', 'like', '%'.$q.'%')
+                  ->orWhere('titolo', 'like', '%'.$q.'%')
+                  ->orWhere('descrizione', 'like', '%'.$q.'%')
+                  ->orWhere('barcode', 'like', '%'.$q.'%');
+            })
+            ->select('id', 'codice_articolo', 'titolo', 'descrizione', 'um', 'giacenza', 'barcode', 'prezzo')
+            ->orderBy('titolo')
+            ->limit(50)
+            ->get();
+        return response()->json(['articoli' => $articoli]);
     }
 
     public function manutentore_search_righe_catalogo(Request $request)

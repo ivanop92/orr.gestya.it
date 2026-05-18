@@ -120,15 +120,16 @@
             </div>
 
             <div class="card-info">
-                <div class="head d-flex align-items-center">
+                <div class="head d-flex align-items-center flex-wrap gap-2">
                     <span class="flex-grow-1"><i class="ri-box-3-line me-1"></i>Materiali utilizzati</span>
-                    <button type="button" class="btn btn-sm btn-soft-primary" onclick="aggiungiMateriale()"><i class="ri-add-line"></i> Riga</button>
+                    <button type="button" class="btn btn-sm btn-soft-success" data-bs-toggle="modal" data-bs-target="#modal_cerca_articolo"><i class="ri-search-line"></i> Da magazzino</button>
+                    <button type="button" class="btn btn-sm btn-soft-primary" onclick="aggiungiMateriale()"><i class="ri-add-line"></i> Manuale</button>
                 </div>
                 <div class="body p-0">
                     <div id="materiali_list" class="px-2 pb-2">
                         {{-- Righe dinamiche --}}
                     </div>
-                    <p class="text-muted small px-3 pb-2 mb-0">Aggiungi i materiali che hai usato. Codice articolo opzionale, descrizione obbligatoria. Lo scarico magazzino effettivo viene fatto dall'ufficio.</p>
+                    <p class="text-muted small px-3 pb-2 mb-0">"<strong>Da magazzino</strong>" scarica davvero la giacenza al submit. "<strong>Manuale</strong>" è solo una nota (nessun movimento magazzino).</p>
                 </div>
             </div>
 
@@ -159,13 +160,17 @@
                 materialeIdx++;
                 var i = materialeIdx;
                 prefill = prefill || {};
+                var fromStock = !!prefill.id_articolo;
+                var bgClass = fromStock ? 'bg-success-subtle' : 'bg-light';
+                var badge = fromStock ? '<span class="badge bg-success ms-2"><i class="ri-store-2-line"></i> Magazzino</span>' : '';
                 var html =
-                    '<div class="border rounded p-2 mb-2 bg-light position-relative" id="mat_row_'+i+'">' +
+                    '<div class="border rounded p-2 mb-2 '+bgClass+' position-relative" id="mat_row_'+i+'">' +
                         '<button type="button" class="btn-close position-absolute top-0 end-0 m-2" onclick="document.getElementById(\'mat_row_'+i+'\').remove()" title="Rimuovi"></button>' +
+                        '<input type="hidden" name="materiali['+i+'][id_articolo]" value="'+(prefill.id_articolo||'')+'">' +
                         '<div class="row g-2">' +
                             '<div class="col-12">' +
-                                '<label class="form-label mb-1 small">Descrizione *</label>' +
-                                '<input type="text" name="materiali['+i+'][descrizione]" class="form-control form-control-sm" placeholder="es. Suole freno Tipo X" required value="'+(prefill.descrizione||'')+'">' +
+                                '<label class="form-label mb-1 small">Descrizione *' + badge + '</label>' +
+                                '<input type="text" name="materiali['+i+'][descrizione]" class="form-control form-control-sm" placeholder="es. Suole freno Tipo X" required value="'+(prefill.descrizione||'').replace(/"/g,'&quot;')+'">' +
                             '</div>' +
                             '<div class="col-4">' +
                                 '<label class="form-label mb-1 small">Qta</label>' +
@@ -176,12 +181,64 @@
                                 '<input type="text" name="materiali['+i+'][um]" class="form-control form-control-sm" value="'+(prefill.um||'PZ')+'">' +
                             '</div>' +
                             '<div class="col-5">' +
-                                '<label class="form-label mb-1 small">Codice (opz.)</label>' +
-                                '<input type="text" name="materiali['+i+'][codice]" class="form-control form-control-sm" value="'+(prefill.codice||'')+'">' +
+                                '<label class="form-label mb-1 small">Codice</label>' +
+                                '<input type="text" name="materiali['+i+'][codice]" class="form-control form-control-sm" value="'+(prefill.codice||'').replace(/"/g,'&quot;')+'">' +
                             '</div>' +
                         '</div>' +
                     '</div>';
                 document.getElementById('materiali_list').insertAdjacentHTML('beforeend', html);
+            }
+
+            // Ricerca articoli a magazzino (AJAX server-side)
+            var ricercaArtTimer = null;
+            function ricercaArticoli() {
+                clearTimeout(ricercaArtTimer);
+                ricercaArtTimer = setTimeout(function() {
+                    var q = document.getElementById('art_search_q').value.trim();
+                    var resBox = document.getElementById('art_search_results');
+                    if (q.length < 2) {
+                        resBox.innerHTML = '<div class="text-muted text-center py-3 small">Digita almeno 2 caratteri…</div>';
+                        return;
+                    }
+                    resBox.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-success"></div></div>';
+                    fetch('/manutentore/ajax/cerca_articoli?q=' + encodeURIComponent(q), { credentials:'same-origin' })
+                        .then(function(r){ return r.json(); })
+                        .then(function(data) {
+                            var arr = data.articoli || [];
+                            if (arr.length === 0) {
+                                resBox.innerHTML = '<div class="text-muted text-center py-3 small">Nessun articolo trovato.</div>';
+                                return;
+                            }
+                            var html = '<div class="list-group list-group-flush">';
+                            arr.forEach(function(a) {
+                                var giac = parseFloat(a.giacenza || 0);
+                                var giacBadge = giac > 0 ? '<span class="badge bg-success">'+giac.toString().replace('.',',')+' '+(a.um||'PZ')+'</span>' : '<span class="badge bg-danger">esaurito</span>';
+                                var dataAttr = encodeURIComponent(JSON.stringify(a));
+                                html += '<a href="#" class="list-group-item list-group-item-action py-2" onclick="aggiungiDaMagazzino(\''+dataAttr+'\'); return false;">' +
+                                    '<div class="d-flex"><div class="flex-grow-1 small">' +
+                                    '<strong>'+ (a.codice_articolo||'') + '</strong> — ' + (a.titolo || a.descrizione || '') +
+                                    '@if(0)@endif' +
+                                    '</div>' +
+                                    '<div class="text-end">' + giacBadge + '</div>' +
+                                    '</div></a>';
+                            });
+                            html += '</div>';
+                            resBox.innerHTML = html;
+                        })
+                        .catch(function(){ resBox.innerHTML = '<div class="text-danger small text-center py-2">Errore ricerca</div>'; });
+                }, 300);
+            }
+            function aggiungiDaMagazzino(encodedJson) {
+                var a = JSON.parse(decodeURIComponent(encodedJson));
+                aggiungiMateriale({
+                    id_articolo: a.id,
+                    codice: a.codice_articolo || '',
+                    descrizione: a.titolo || a.descrizione || '',
+                    qta: 1,
+                    um: a.um || 'PZ',
+                });
+                var modal = bootstrap.Modal.getInstance(document.getElementById('modal_cerca_articolo'));
+                if (modal) modal.hide();
             }
 
             // Lavorazioni proposte
@@ -326,7 +383,7 @@
             }
         </script>
 
-        {{-- Modale ricerca catalogo --}}
+        {{-- Modale ricerca catalogo lavorazioni --}}
         <div class="modal fade" id="modal_cerca_lav" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
                 <div class="modal-content">
@@ -339,6 +396,25 @@
                         <div id="lav_search_results" style="max-height: 60vh; overflow-y:auto;">
                             <div class="text-muted text-center py-3 small">Digita almeno 2 caratteri…</div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Modale ricerca articoli a magazzino --}}
+        <div class="modal fade" id="modal_cerca_articolo" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h6 class="modal-title"><i class="ri-store-2-line me-1"></i>Cerca articolo a magazzino</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-2">
+                        <input type="text" id="art_search_q" class="form-control mb-2" placeholder="Digita codice, descrizione o barcode..." oninput="ricercaArticoli()" autofocus>
+                        <div id="art_search_results" style="max-height: 60vh; overflow-y:auto;">
+                            <div class="text-muted text-center py-3 small">Digita almeno 2 caratteri…</div>
+                        </div>
+                        <p class="text-muted small mt-2 mb-0">Selezionando un articolo dal magazzino, al submit del report verrà creato un movimento di scarico nella giacenza.</p>
                     </div>
                 </div>
             </div>
@@ -443,6 +519,9 @@
                                 <div class="flex-grow-1">
                                     <strong>{{ $m->descrizione }}</strong>
                                     @if($m->codice) <small class="text-muted">[{{ $m->codice }}]</small>@endif
+                                    @if($m->id_mgmov)
+                                        <span class="badge bg-success ms-1" title="Scaricato dal magazzino"><i class="ri-store-2-line"></i> Magazzino</span>
+                                    @endif
                                 </div>
                                 <div class="text-end">
                                     <span class="badge bg-soft-primary text-primary">{{ rtrim(rtrim(number_format($m->qta,3,',','.'),'0'),',') }} {{ $m->um }}</span>
