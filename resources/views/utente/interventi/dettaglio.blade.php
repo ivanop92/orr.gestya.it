@@ -302,8 +302,12 @@
                                                 <td>
                                                     @if($m->id_mgmov)
                                                         <span class="badge bg-success" title="Movimento {{ $m->id_mgmov }}"><i class="ri-store-2-line"></i> Scaricato</span>
-                                                        @if($m->magazzino_descrizione)<br><small class="text-muted">{{ $m->magazzino_descrizione }}</small>@endif
-                                                        @if($m->articolo_giacenza_attuale !== null)<br><small class="text-muted">Giac. attuale: {{ rtrim(rtrim(number_format($m->articolo_giacenza_attuale,3,',','.'),'0'),',') }}</small>@endif
+                                                        @if($m->magazzino_descrizione)
+                                                            <br><small class="text-muted">{{ $m->magazzino_descrizione }}</small>
+                                                        @endif
+                                                        @if(!is_null($m->articolo_giacenza_attuale))
+                                                            <br><small class="text-muted">Giac. attuale: {{ rtrim(rtrim(number_format($m->articolo_giacenza_attuale,3,',','.'),'0'),',') }}</small>
+                                                        @endif
                                                     @else
                                                         <span class="badge bg-secondary" title="Solo dichiarato dal manutentore">Manuale</span>
                                                     @endif
