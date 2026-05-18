@@ -451,13 +451,11 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Messaggio</label>
-                        <textarea name="messaggio" class="form-control" rows="6">Buongiorno,
-
-in allegato trovate il preventivo relativo all'intervento di manutenzione@if($intervento->vagone_codice) sul vagone {{ $intervento->vagone_codice }}@elseif($intervento->automezzo) sul vagone {{ $intervento->automezzo }}@endif.
-
-Restiamo a disposizione per qualsiasi chiarimento.
-
-Cordiali saluti</textarea>
+                        @php
+                            $vagoneLabel = $intervento->vagone_codice ?: $intervento->automezzo;
+                            $msgDefault = "Buongiorno,\n\nin allegato trovate il preventivo relativo all'intervento di manutenzione" . ($vagoneLabel ? " sul vagone $vagoneLabel" : "") . ".\n\nRestiamo a disposizione per qualsiasi chiarimento.\n\nCordiali saluti";
+                        @endphp
+                        <textarea name="messaggio" class="form-control" rows="6">{{ $msgDefault }}</textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Firma <small class="text-muted">(appare in fondo all'email)</small></label>
