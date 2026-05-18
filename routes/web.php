@@ -50,6 +50,7 @@ Route::post('utente/interventi/{id}/step2_assegna',array('uses'=>'UtenteControll
 Route::post('utente/interventi/{id}/step3_report',array('uses'=>'UtenteController@interventi_step_3_report'));
 Route::post('utente/interventi/{id}/step4_emetti_preventivo',array('uses'=>'UtenteController@interventi_step_4_emetti_preventivo'));
 Route::post('utente/interventi/{id}/step5_decisione',array('uses'=>'UtenteController@interventi_step_5_decisione'));
+Route::post('utente/interventi/{id}/invia_preventivo_email',array('uses'=>'UtenteController@interventi_invia_preventivo_email'));
 Route::post('utente/interventi/{id}/step6_fattura',array('uses'=>'UtenteController@interventi_step_6_fattura'));
 
 // Dashboard Manutentore (responsive smartphone/tablet)

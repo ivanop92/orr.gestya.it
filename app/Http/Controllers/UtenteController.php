@@ -12148,6 +12148,8 @@ ORDER BY s.data_scadenza ASC',
                 'c.ragione_sociale as cliente_ragione_sociale',
                 'c.indirizzo as cliente_indirizzo',
                 'c.comune as cliente_comune',
+                'c.email as cliente_email',
+                'c.pec as cliente_pec',
                 'v.codice as vagone_codice',
                 'v.tipo as vagone_tipo',
                 'op.nome as operatore_nome',
@@ -12158,6 +12160,9 @@ ORDER BY s.data_scadenza ASC',
         if (!$intervento) {
             return Redirect::to('utente/interventi')->with('error', 'Intervento non trovato');
         }
+
+        // Firma email del utente loggato (auto-popola la modale invio preventivo)
+        $firma_utente = DB::table('utenti')->where('id', $utente->id)->value('firma_email') ?: '';
 
         $log = DB::table('interventi_log')
             ->where('id_intervento', $id)
@@ -12199,7 +12204,7 @@ ORDER BY s.data_scadenza ASC',
             ->get();
 
         $page = 'interventi';
-        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'page'));
+        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'firma_utente', 'page'));
     }
 
     public function interventi_completa_step($id, Request $request)
@@ -12428,6 +12433,125 @@ ORDER BY s.data_scadenza ASC',
         if ($nRiga > 0) $note .= ' con '.$nRiga.' righe da proposte manutentore';
         $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 4, 'completato', $note);
         return Redirect::to('utente/dettaglio_documento/'.$id_dotes)->with('success', 'Preventivo creato'.($nRiga > 0 ? ' con '.$nRiga.' righe pre-popolate dal report manutentore' : ', aggiungi le righe lavorazione').'.');
+    }
+
+    public function interventi_invia_preventivo_email($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select('i.*', 'c.ragione_sociale as cliente_ragione_sociale', 'c.email as cliente_email')
+            ->first();
+
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+        if (!$i->id_dotes_preventivo) return redirect()->back()->with('error', 'Nessun preventivo collegato all\'intervento');
+
+        $destinatari = trim((string) $request->input('destinatari', ''));
+        $cc          = trim((string) $request->input('cc', ''));
+        $oggetto     = trim((string) $request->input('oggetto', '')) ?: 'Preventivo n. '.$i->id_dotes_preventivo;
+        $messaggio   = trim((string) $request->input('messaggio', ''));
+        $firma       = trim((string) $request->input('firma', ''));
+        $salvaFirma  = $request->input('salva_firma', 0);
+
+        if ($destinatari === '') {
+            return redirect()->back()->with('error', 'Inserisci almeno un destinatario');
+        }
+
+        // Salva firma sul profilo utente se richiesto
+        if ($salvaFirma && $firma !== '') {
+            DB::table('utenti')->where('id', $utente->id)->update(['firma_email' => $firma]);
+        }
+
+        $azienda = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        try {
+            $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = 'smtps.aruba.it';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'noreply@gestya.it';
+            $mail->Password = 'jwZFTChzg8gp41?c';
+            $mail->SMTPSecure = 'ssl';
+            $mail->CharSet = 'utf-8';
+            $mail->Port = 465;
+            $fromName = $azienda->ragione_sociale ?? 'Gestya';
+            $mail->setFrom('noreply@gestya.it', $fromName);
+            if (!empty($utente->email)) {
+                $mail->addReplyTo($utente->email);
+            }
+
+            $destArr = preg_split('/[,;]+/', $destinatari);
+            foreach ($destArr as $em) {
+                $em = trim($em);
+                if ($em && filter_var($em, FILTER_VALIDATE_EMAIL)) $mail->addAddress($em);
+            }
+            if ($cc !== '') {
+                foreach (preg_split('/[,;]+/', $cc) as $em) {
+                    $em = trim($em);
+                    if ($em && filter_var($em, FILTER_VALIDATE_EMAIL)) $mail->addCC($em);
+                }
+            }
+
+            $linkPdf = url('/stampa/documento/'.$i->id_dotes_preventivo);
+            $bodyHtml = '<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">' .
+                nl2br(htmlspecialchars($messaggio, ENT_QUOTES, 'UTF-8')) .
+                '<p style="margin-top: 18px;"><a href="'.htmlspecialchars($linkPdf, ENT_QUOTES, 'UTF-8').'" style="display:inline-block;padding:10px 18px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;">Apri Preventivo</a></p>' .
+                (!empty($firma) ? '<hr style="margin: 24px 0; border:0; border-top: 1px solid #e5e7eb;"><div style="color:#555;">'.nl2br(htmlspecialchars($firma, ENT_QUOTES, 'UTF-8')).'</div>' : '') .
+                '</div>';
+
+            $mail->isHTML(true);
+            $mail->Subject = $oggetto;
+            $mail->Body = $bodyHtml;
+            $mail->AltBody = strip_tags($messaggio."\n\n".$linkPdf."\n\n".$firma);
+
+            // Allega PDF (best-effort via stampa documento)
+            try {
+                $pdfController = new \App\Http\Controllers\StampaController();
+                if (method_exists($pdfController, 'documento')) {
+                    $tmpFile = sys_get_temp_dir().'/preventivo_'.$i->id_dotes_preventivo.'.pdf';
+                    // Tentativo via mPDF: render HTML del template di stampa
+                    $dotes = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->first();
+                    $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
+                    if ($dotes) {
+                        $mpdf = new \Mpdf\Mpdf(['mode' => 'utf-8', 'format' => 'A4']);
+                        $html = '<h2>Preventivo n. '.$dotes->numero_doc.'</h2><p>Cliente: '.htmlspecialchars($dotes->ragione_sociale).'</p>';
+                        $html .= '<table border="1" cellpadding="6" style="width:100%;border-collapse:collapse;font-size:11px"><tr><th>Servizio</th><th>Codice</th><th>Descrizione</th><th>Qta</th><th>P.U.</th><th>IVA%</th><th>Totale</th></tr>';
+                        foreach ($dorig as $r) {
+                            $html .= '<tr><td>'.htmlspecialchars($r->servizio ?? '').'</td><td>'.htmlspecialchars($r->cd_ar ?? '').'</td><td>'.htmlspecialchars($r->descrizione ?? '').'</td><td align="right">'.$r->qta.' '.$r->um.'</td><td align="right">€ '.number_format($r->prezzo_unitario,2,',','.').'</td><td align="right">'.$r->iva.'%</td><td align="right">€ '.number_format($r->prezzo_totale,2,',','.').'</td></tr>';
+                        }
+                        $html .= '</table>';
+                        $html .= '<p style="margin-top:20px;text-align:right;font-size:14px"><strong>Imponibile: € '.number_format($dotes->imponibile,2,',','.').'</strong></p>';
+                        $html .= '<p style="text-align:right"><strong>Imposta: € '.number_format($dotes->imposta,2,',','.').'</strong></p>';
+                        $html .= '<p style="text-align:right;font-size:16px"><strong>Totale: € '.number_format($dotes->totale,2,',','.').'</strong></p>';
+                        $mpdf->WriteHTML($html);
+                        $mpdf->Output($tmpFile, 'F');
+                        $mail->addAttachment($tmpFile, 'preventivo_'.$dotes->numero_doc.'.pdf');
+                    }
+                }
+            } catch (\Exception $e) {
+                // se PDF fallisce, manda solo link
+            }
+
+            $mail->send();
+
+            DB::table('interventi_log')->insert([
+                'id_intervento' => $id,
+                'id_azienda'    => $utente->id_azienda,
+                'id_utente'     => $utente->id,
+                'step'          => 5,
+                'azione'        => 'preventivo_inviato',
+                'note'          => 'Email inviata a: '.$destinatari.($cc ? ' (CC: '.$cc.')' : ''),
+                'created_at'    => date('Y-m-d H:i:s'),
+            ]);
+
+            return Redirect::to('utente/interventi/'.$id)->with('success', 'Preventivo inviato via email a: '.$destinatari);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Errore invio email: '.$e->getMessage());
+        }
     }
 
     public function interventi_step_5_decisione($id, Request $request)

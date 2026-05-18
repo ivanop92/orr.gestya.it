@@ -191,16 +191,19 @@
                                     </a>
                                 </div>
                             @endif
-                            <p>Decidi se accettare o rifiutare il preventivo.</p>
+                            <p>Invia il preventivo al cliente, oppure decidi internamente.</p>
                             <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal_invia_preventivo">
+                                    <i class="ri-mail-send-line me-1"></i> Invia preventivo al cliente
+                                </button>
                                 <form method="post" action="/utente/interventi/{{ $intervento->id }}/step5_decisione">
                                     @csrf
                                     <input type="hidden" name="azione" value="accetta">
-                                    <button type="submit" class="btn btn-success" onclick="return confirm('Accettare il preventivo?');">
-                                        <i class="ri-check-line me-1"></i> Accetta → Step 6
+                                    <button type="submit" class="btn btn-soft-success" onclick="return confirm('Accettare il preventivo?');">
+                                        <i class="ri-check-line me-1"></i> Accetta
                                     </button>
                                 </form>
-                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modal_rifiuta_intervento">
+                                <button type="button" class="btn btn-soft-danger" data-bs-toggle="modal" data-bs-target="#modal_rifiuta_intervento">
                                     <i class="ri-close-circle-line me-1"></i> Rifiuta
                                 </button>
                             </div>
@@ -420,6 +423,59 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<div class="modal fade" id="modal_invia_preventivo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form method="post" action="/utente/interventi/{{ $intervento->id }}/invia_preventivo_email">
+            @csrf
+            <div class="modal-content border-0">
+                <div class="modal-header bg-soft-primary p-3">
+                    <h5 class="modal-title"><i class="ri-mail-send-line me-2"></i>Invia preventivo via email</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Destinatari <b style="color:red">*</b></label>
+                        <input type="text" name="destinatari" class="form-control" value="{{ $intervento->cliente_email ?? '' }}" required placeholder="email@dominio.it; altra@dominio.it">
+                        <small class="text-muted">Separa più indirizzi con <code>;</code> o <code>,</code></small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">CC (opzionale)</label>
+                        <input type="text" name="cc" class="form-control" placeholder="copia@dominio.it">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Oggetto</label>
+                        <input type="text" name="oggetto" class="form-control" value="Preventivo per intervento di manutenzione - {{ $intervento->cliente_ragione_sociale }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Messaggio</label>
+                        <textarea name="messaggio" class="form-control" rows="6">Buongiorno,
+
+in allegato trovate il preventivo relativo all'intervento di manutenzione@if($intervento->vagone_codice) sul vagone {{ $intervento->vagone_codice }}@elseif($intervento->automezzo) sul vagone {{ $intervento->automezzo }}@endif.
+
+Restiamo a disposizione per qualsiasi chiarimento.
+
+Cordiali saluti</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Firma <small class="text-muted">(appare in fondo all'email)</small></label>
+                        <textarea name="firma" class="form-control" rows="3" placeholder="Nome Cognome&#10;Ruolo&#10;Email · Telefono">{{ $firma_utente ?? ($utente->nome.' '.$utente->cognome) }}</textarea>
+                        <div class="form-check form-check-sm mt-1">
+                            <input class="form-check-input" type="checkbox" name="salva_firma" id="salva_firma" value="1">
+                            <label class="form-check-label small" for="salva_firma">Salva questa firma sul mio profilo per la prossima volta</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="ri-send-plane-line me-1"></i> Invia Email
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 
