@@ -12666,7 +12666,26 @@ ORDER BY s.data_scadenza ASC',
                 // Se la generazione del PDF fallisce, l'email parte ugualmente con il solo link
             }
 
-            $mail->send();
+            // Debug verbose: cattura output SMTP completo
+            $smtpDebugOutput = '';
+            $mail->SMTPDebug = 2;
+            $mail->Debugoutput = function($str, $level) use (&$smtpDebugOutput) {
+                $smtpDebugOutput .= '[L'.$level.'] '.$str."\n";
+            };
+
+            $sent = $mail->send();
+
+            \Log::info('Invio preventivo intervento #'.$id, [
+                'destinatari' => $destinatari,
+                'cc'          => $cc,
+                'sent'        => $sent,
+                'error_info'  => $mail->ErrorInfo,
+                'smtp_debug'  => $smtpDebugOutput,
+            ]);
+
+            if (!$sent) {
+                return Redirect::to('utente/interventi/'.$id)->with('error', 'SMTP non ha consegnato la mail. ErrorInfo: '.$mail->ErrorInfo);
+            }
 
             DB::table('interventi_log')->insert([
                 'id_intervento' => $id,
@@ -12680,6 +12699,10 @@ ORDER BY s.data_scadenza ASC',
 
             return Redirect::to('utente/interventi/'.$id)->with('success', 'Preventivo inviato via email a: '.$destinatari);
         } catch (\Exception $e) {
+            \Log::error('Errore invio preventivo intervento #'.$id, [
+                'msg'   => $e->getMessage(),
+                'trace' => substr($e->getTraceAsString(), 0, 2000),
+            ]);
             return redirect()->back()->with('error', 'Errore invio email: '.$e->getMessage());
         }
     }
