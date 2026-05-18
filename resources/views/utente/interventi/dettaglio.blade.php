@@ -191,6 +191,20 @@
                                     </a>
                                 </div>
                             @endif
+
+                            @if(!empty($firma_preventivo) && !empty($firma_preventivo->firmato_il))
+                                <div class="alert alert-success mb-3">
+                                    <strong><i class="ri-check-double-line me-1"></i>Firmato dal cliente</strong><br>
+                                    <strong>{{ $firma_preventivo->firmato_da_nome }}</strong> ha firmato il
+                                    {{ \Carbon\Carbon::parse($firma_preventivo->firmato_il)->format('d/m/Y H:i') }}
+                                    <small class="text-muted d-block">SMS OTP · numero {{ $firma_preventivo->firma_telefono }} · IP {{ $firma_preventivo->firma_ip }}</small>
+                                </div>
+                            @elseif(!empty($firma_preventivo) && !empty($firma_preventivo->firma_token))
+                                <div class="alert alert-warning mb-3">
+                                    <i class="ri-time-line me-1"></i>In attesa di firma cliente —
+                                    <a href="/firma/{{ $firma_preventivo->firma_token }}" target="_blank" class="alert-link">Link pubblico</a>
+                                </div>
+                            @endif
                             <p>Invia il preventivo al cliente, oppure decidi internamente.</p>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal_invia_preventivo">

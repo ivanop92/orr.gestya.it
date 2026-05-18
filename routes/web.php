@@ -51,6 +51,11 @@ Route::post('utente/interventi/{id}/step3_report',array('uses'=>'UtenteControlle
 Route::post('utente/interventi/{id}/step4_emetti_preventivo',array('uses'=>'UtenteController@interventi_step_4_emetti_preventivo'));
 Route::post('utente/interventi/{id}/step5_decisione',array('uses'=>'UtenteController@interventi_step_5_decisione'));
 Route::post('utente/interventi/{id}/invia_preventivo_email',array('uses'=>'UtenteController@interventi_invia_preventivo_email'));
+
+// Pagina pubblica firma cliente (no login) — link via mail
+Route::get('firma/{token}',array('uses'=>'FirmaController@preventivo'));
+Route::post('firma/{token}/invia_otp',array('uses'=>'FirmaController@invia_otp'));
+Route::post('firma/{token}/verifica_otp',array('uses'=>'FirmaController@verifica_otp'));
 Route::post('utente/interventi/{id}/step6_fattura',array('uses'=>'UtenteController@interventi_step_6_fattura'));
 
 // Dashboard Manutentore (responsive smartphone/tablet)

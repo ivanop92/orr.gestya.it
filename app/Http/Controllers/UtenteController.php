@@ -12164,6 +12164,15 @@ ORDER BY s.data_scadenza ASC',
         // Firma email del utente loggato (auto-popola la modale invio preventivo)
         $firma_utente = DB::table('utenti')->where('id', $utente->id)->value('firma_email') ?: '';
 
+        // Stato firma cliente sul preventivo collegato (se presente)
+        $firma_preventivo = null;
+        if ($intervento->id_dotes_preventivo) {
+            $firma_preventivo = DB::table('dotes')
+                ->where('id', $intervento->id_dotes_preventivo)
+                ->select('firma_token', 'firmato_il', 'firmato_da_nome', 'firma_telefono', 'firma_ip', 'firma_otp_inviato_il')
+                ->first();
+        }
+
         $log = DB::table('interventi_log')
             ->where('id_intervento', $id)
             ->orderByDesc('created_at')
@@ -12204,7 +12213,7 @@ ORDER BY s.data_scadenza ASC',
             ->get();
 
         $page = 'interventi';
-        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'firma_utente', 'page'));
+        return View::make('utente.interventi.dettaglio', compact('utente', 'intervento', 'log', 'operatori', 'allegati', 'materiali', 'proposte', 'firma_utente', 'firma_preventivo', 'page'));
     }
 
     public function interventi_completa_step($id, Request $request)
@@ -12496,10 +12505,18 @@ ORDER BY s.data_scadenza ASC',
                 }
             }
 
-            $linkPdf = url('/stampa/documento/'.$i->id_dotes_preventivo);
+            // Genera (o riusa) il firma_token per il link pubblico al preventivo
+            $firmaToken = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->value('firma_token');
+            if (empty($firmaToken)) {
+                $firmaToken = Str::random(48);
+                DB::table('dotes')->where('id', $i->id_dotes_preventivo)->update(['firma_token' => $firmaToken]);
+            }
+            $linkFirma = url('/firma/'.$firmaToken);
+
             $bodyHtml = '<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">' .
                 nl2br(htmlspecialchars($messaggio, ENT_QUOTES, 'UTF-8')) .
-                '<p style="margin-top: 18px;"><a href="'.htmlspecialchars($linkPdf, ENT_QUOTES, 'UTF-8').'" style="display:inline-block;padding:10px 18px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;">Apri Preventivo</a></p>' .
+                '<p style="margin-top: 18px;"><a href="'.htmlspecialchars($linkFirma, ENT_QUOTES, 'UTF-8').'" style="display:inline-block;padding:12px 22px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Apri e Firma il Preventivo</a></p>' .
+                '<p style="font-size:12px;color:#666;">Cliccando il pulsante potrai visualizzare il preventivo e firmarlo digitalmente via SMS OTP.</p>' .
                 (!empty($firma) ? '<hr style="margin: 24px 0; border:0; border-top: 1px solid #e5e7eb;"><div style="color:#555;">'.nl2br(htmlspecialchars($firma, ENT_QUOTES, 'UTF-8')).'</div>' : '') .
                 '</div>';
 
@@ -12508,32 +12525,145 @@ ORDER BY s.data_scadenza ASC',
             $mail->Body = $bodyHtml;
             $mail->AltBody = strip_tags($messaggio."\n\n".$linkPdf."\n\n".$firma);
 
-            // Allega PDF (best-effort via stampa documento)
+            // Allega PDF (mPDF) con layout professionale
             try {
-                $pdfController = new \App\Http\Controllers\StampaController();
-                if (method_exists($pdfController, 'documento')) {
-                    $tmpFile = sys_get_temp_dir().'/preventivo_'.$i->id_dotes_preventivo.'.pdf';
-                    // Tentativo via mPDF: render HTML del template di stampa
-                    $dotes = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->first();
-                    $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
-                    if ($dotes) {
-                        $mpdf = new \Mpdf\Mpdf(['mode' => 'utf-8', 'format' => 'A4']);
-                        $html = '<h2>Preventivo n. '.$dotes->numero_doc.'</h2><p>Cliente: '.htmlspecialchars($dotes->ragione_sociale).'</p>';
-                        $html .= '<table border="1" cellpadding="6" style="width:100%;border-collapse:collapse;font-size:11px"><tr><th>Servizio</th><th>Codice</th><th>Descrizione</th><th>Qta</th><th>P.U.</th><th>IVA%</th><th>Totale</th></tr>';
-                        foreach ($dorig as $r) {
-                            $html .= '<tr><td>'.htmlspecialchars($r->servizio ?? '').'</td><td>'.htmlspecialchars($r->cd_ar ?? '').'</td><td>'.htmlspecialchars($r->descrizione ?? '').'</td><td align="right">'.$r->qta.' '.$r->um.'</td><td align="right">€ '.number_format($r->prezzo_unitario,2,',','.').'</td><td align="right">'.$r->iva.'%</td><td align="right">€ '.number_format($r->prezzo_totale,2,',','.').'</td></tr>';
-                        }
-                        $html .= '</table>';
-                        $html .= '<p style="margin-top:20px;text-align:right;font-size:14px"><strong>Imponibile: € '.number_format($dotes->imponibile,2,',','.').'</strong></p>';
-                        $html .= '<p style="text-align:right"><strong>Imposta: € '.number_format($dotes->imposta,2,',','.').'</strong></p>';
-                        $html .= '<p style="text-align:right;font-size:16px"><strong>Totale: € '.number_format($dotes->totale,2,',','.').'</strong></p>';
-                        $mpdf->WriteHTML($html);
-                        $mpdf->Output($tmpFile, 'F');
-                        $mail->addAttachment($tmpFile, 'preventivo_'.$dotes->numero_doc.'.pdf');
+                $tmpFile = sys_get_temp_dir().'/preventivo_'.$i->id_dotes_preventivo.'.pdf';
+                $dotes = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->first();
+                $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
+                $az = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+                if ($dotes) {
+                    $mpdf = new \Mpdf\Mpdf([
+                        'mode' => 'utf-8',
+                        'format' => 'A4',
+                        'margin_left' => 12,
+                        'margin_right' => 12,
+                        'margin_top' => 14,
+                        'margin_bottom' => 14,
+                        'default_font' => 'helvetica',
+                        'default_font_size' => 9,
+                    ]);
+
+                    $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+                    $eur = function ($v) { return '&euro; '.number_format((float) $v, 2, ',', '.'); };
+
+                    $html = '<style>
+                        body { font-family: helvetica, sans-serif; color: #222; }
+                        h1 { color: #0f766e; font-size: 22px; margin: 0; }
+                        .header-tbl { width: 100%; margin-bottom: 14px; }
+                        .header-tbl td { vertical-align: top; padding: 0; }
+                        .box { border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; }
+                        .label { color: #6b7280; font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+                        .strong { font-weight: bold; }
+                        table.righe { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9px; }
+                        table.righe th { background: #0f766e; color: #fff; padding: 6px 4px; text-align: left; font-size: 8px; }
+                        table.righe td { padding: 5px 4px; border-bottom: 1px solid #e5e7eb; }
+                        table.righe tr:nth-child(even) td { background: #f9fafb; }
+                        .totali { width: 280px; margin-left: auto; margin-top: 12px; }
+                        .totali td { padding: 4px 8px; }
+                        .totali .grand { border-top: 2px solid #0f766e; font-size: 14px; padding-top: 8px; color: #0f766e; font-weight: bold; }
+                        .footer { margin-top: 24px; font-size: 8px; color: #888; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+                        .firma-box { border: 1px dashed #d1d5db; padding: 24px; margin-top: 30px; min-height: 80px; }
+                    </style>';
+
+                    // Header con mittente + destinatario + dati doc
+                    $html .= '<h1>Preventivo</h1>';
+                    $html .= '<p style="margin:4px 0 14px;color:#6b7280;">N. <strong>'.$esc($dotes->numero_doc).'/'.date('Y', strtotime($dotes->data_doc)).'</strong> del '.date('d/m/Y', strtotime($dotes->data_doc)).'</p>';
+
+                    $html .= '<table class="header-tbl"><tr>
+                        <td width="48%"><div class="box">
+                            <div class="label">Mittente</div>
+                            <div class="strong">'.$esc($az->ragione_sociale ?? '').'</div>
+                            <div>'.$esc($az->indirizzo ?? '').'<br>'.$esc($az->cap ?? '').' '.$esc($az->comune ?? '').' ('.$esc($az->provincia ?? '').')</div>
+                            '.(!empty($az->partita_iva) ? '<div style="color:#666;font-size:8px;">P.IVA '.$esc($az->partita_iva).'</div>' : '').'
+                            '.(!empty($az->email_ricezione_fatture) ? '<div style="color:#666;font-size:8px;">'.$esc($az->email_ricezione_fatture).'</div>' : '').'
+                        </div></td>
+                        <td width="4%"></td>
+                        <td width="48%"><div class="box">
+                            <div class="label">Destinatario</div>
+                            <div class="strong">'.$esc($dotes->ragione_sociale).'</div>
+                            <div>'.$esc($dotes->indirizzo).'<br>'.$esc($dotes->cap).' '.$esc($dotes->comune).' ('.$esc($dotes->provincia).')</div>
+                            '.(!empty($dotes->partita_iva) ? '<div style="color:#666;font-size:8px;">P.IVA '.$esc($dotes->partita_iva).'</div>' : '').'
+                            '.(!empty($dotes->pec) ? '<div style="color:#666;font-size:8px;">'.$esc($dotes->pec).'</div>' : '').'
+                        </div></td>
+                    </tr></table>';
+
+                    // Dati intervento (vagone, localita, motivo)
+                    if (!empty($dotes->automezzo) || !empty($dotes->localita) || !empty($dotes->reason_intake)) {
+                        $html .= '<div class="box" style="margin-bottom:14px;">';
+                        if (!empty($dotes->automezzo)) $html .= '<div><span class="label">Vagone:</span> <strong>'.$esc($dotes->automezzo).'</strong></div>';
+                        if (!empty($dotes->localita))  $html .= '<div><span class="label">Localita:</span> '.$esc($dotes->localita).'</div>';
+                        if (!empty($dotes->reason_intake)) $html .= '<div><span class="label">Motivo rientro:</span> '.$esc($dotes->reason_intake).'</div>';
+                        $html .= '</div>';
                     }
+
+                    // Tabella righe
+                    $html .= '<table class="righe">
+                        <thead><tr>
+                            <th width="4%">#</th>
+                            <th width="7%">Serv.</th>
+                            <th width="10%">Codice</th>
+                            <th width="40%">Descrizione</th>
+                            <th width="8%" style="text-align:right">Qta</th>
+                            <th width="10%" style="text-align:right">P.U.</th>
+                            <th width="6%" style="text-align:right">IVA%</th>
+                            <th width="15%" style="text-align:right">Totale</th>
+                        </tr></thead><tbody>';
+                    $n = 0;
+                    foreach ($dorig as $r) {
+                        $n++;
+                        $desc = $esc($r->descrizione ?: $r->nome_prodotto);
+                        if (!empty($r->descrizione_materiale)) {
+                            $desc .= '<br><span style="color:#666;font-size:8px;">Materiale: '.$esc($r->descrizione_materiale);
+                            if (!empty($r->materiale) && $r->materiale > 0) $desc .= ' ('.$eur($r->materiale).')';
+                            $desc .= '</span>';
+                        }
+                        if (!empty($r->minuti) && $r->minuti > 0) {
+                            $desc .= '<br><span style="color:#666;font-size:8px;">Tempo: '.rtrim(rtrim(number_format($r->minuti, 2, ',', ''), '0'), ',').' min</span>';
+                        }
+                        $html .= '<tr>
+                            <td>'.$n.'</td>
+                            <td>'.$esc($r->servizio).'</td>
+                            <td>'.$esc($r->cd_ar).'</td>
+                            <td>'.$desc.'</td>
+                            <td style="text-align:right">'.rtrim(rtrim(number_format($r->qta, 3, ',', '.'), '0'), ',').' '.$esc($r->um).'</td>
+                            <td style="text-align:right">'.$eur($r->prezzo_unitario).'</td>
+                            <td style="text-align:right">'.$r->iva.'</td>
+                            <td style="text-align:right;font-weight:bold">'.$eur($r->prezzo_totale).'</td>
+                        </tr>';
+                    }
+                    $html .= '</tbody></table>';
+
+                    // Totali
+                    $html .= '<table class="totali">
+                        <tr><td>Imponibile</td><td style="text-align:right">'.$eur($dotes->imponibile).'</td></tr>
+                        <tr><td>Imposta</td><td style="text-align:right">'.$eur($dotes->imposta).'</td></tr>
+                        <tr class="grand"><td>TOTALE</td><td style="text-align:right">'.$eur($dotes->totale).'</td></tr>
+                    </table>';
+
+                    // Firma
+                    if (!empty($dotes->firmato_il)) {
+                        $html .= '<div class="firma-box" style="background:#ecfdf5;border-color:#6ee7b7;">
+                            <div class="strong" style="color:#065f46;">FIRMATO DIGITALMENTE</div>
+                            <div>'.$esc($dotes->firmato_da_nome).' il '.date('d/m/Y H:i', strtotime($dotes->firmato_il)).'</div>
+                            <div style="color:#666;font-size:8px;">Via SMS OTP — Numero '.$esc($dotes->firma_telefono).' — IP '.$esc($dotes->firma_ip).'</div>
+                        </div>';
+                    } else {
+                        $html .= '<div class="firma-box">
+                            <div class="label">Firma per accettazione del cliente</div>
+                            <div style="height:40px;"></div>
+                            <div style="border-top:1px solid #999;width:60%;padding-top:4px;color:#666;font-size:8px;">Data e firma</div>
+                        </div>';
+                    }
+
+                    $html .= '<div class="footer">Documento generato il '.date('d/m/Y H:i').' tramite Gestya</div>';
+
+                    $mpdf->WriteHTML($html);
+                    $mpdf->Output($tmpFile, 'F');
+                    $mail->addAttachment($tmpFile, 'preventivo_'.$dotes->numero_doc.'.pdf');
                 }
             } catch (\Exception $e) {
-                // se PDF fallisce, manda solo link
+                // Se la generazione del PDF fallisce, l'email parte ugualmente con il solo link
             }
 
             $mail->send();
