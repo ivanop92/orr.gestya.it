@@ -51,6 +51,12 @@ Route::post('utente/interventi/{id}/step3_report',array('uses'=>'UtenteControlle
 Route::post('utente/interventi/{id}/step4_emetti_preventivo',array('uses'=>'UtenteController@interventi_step_4_emetti_preventivo'));
 Route::post('utente/interventi/{id}/step5_decisione',array('uses'=>'UtenteController@interventi_step_5_decisione'));
 Route::post('utente/interventi/{id}/step6_fattura',array('uses'=>'UtenteController@interventi_step_6_fattura'));
+
+// Dashboard Manutentore (responsive smartphone/tablet)
+Route::any('manutentore/dashboard',array('uses'=>'UtenteController@manutentore_dashboard'));
+Route::any('manutentore/intervento/{id}',array('uses'=>'UtenteController@manutentore_intervento'));
+Route::post('manutentore/intervento/{id}/invia_report',array('uses'=>'UtenteController@manutentore_invia_report'));
+Route::any('manutentore/logout',array('uses'=>'UtenteController@logout'));
 Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));
 Route::post('utente/ajax/ordina_righe_documento/{id_dotes}',array('uses'=>'UtenteController@ordina_righe_documento'));
 Route::any('utente/articoli',array('uses'=>'UtenteController@articoli'));

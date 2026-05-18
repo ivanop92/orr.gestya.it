@@ -49,6 +49,8 @@ class AdminController extends Controller{
                 session(['utente' => $utente]);
                 session(['anno' => date("Y")]);
                 session()->save();
+                // Manutentore: dashboard responsive dedicata (smartphone/tablet)
+                if(!empty($utente->manutentore)) return Redirect::to('manutentore/dashboard');
                 if($utente->admin_azienda == 1) return Redirect::to('utente/index');
                 if($utente->admin_azienda == 2) return Redirect::to('utente/index');
                 if($utente->id_tipologia == 1) return Redirect::to('utente/visualizza_provvigioni');

@@ -11683,6 +11683,100 @@ ORDER BY s.data_scadenza ASC',
     }
 
     // ============================================================
+    // DASHBOARD MANUTENTORE (responsive smartphone/tablet)
+    // ============================================================
+
+    private function _check_manutentore()
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        if (empty($utente->manutentore)) {
+            // Non e' un manutentore: redirect alla home utente standard
+            abort(403, 'Accesso riservato ai manutentori');
+        }
+        return $utente;
+    }
+
+    public function manutentore_dashboard(Request $request)
+    {
+        $utente = $this->_check_manutentore();
+
+        // Interventi assegnati a me, attivi (non completati)
+        $interventi = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->where('i.id_operatore_assegnato', $utente->id)
+            ->whereIn('i.stato', ['in_corso'])
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_ragione_sociale',
+                'v.codice as vagone_codice',
+                'v.tipo as vagone_tipo'
+            )
+            ->orderByRaw("CASE i.priorita WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'bassa' THEN 3 ELSE 4 END")
+            ->orderByDesc('i.created_at')
+            ->get();
+
+        return View::make('manutentore.dashboard', compact('utente', 'interventi'));
+    }
+
+    public function manutentore_intervento($id, Request $request)
+    {
+        $utente = $this->_check_manutentore();
+
+        $intervento = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->where('i.id_operatore_assegnato', $utente->id)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_ragione_sociale',
+                'c.indirizzo as cliente_indirizzo',
+                'c.comune as cliente_comune',
+                'v.codice as vagone_codice',
+                'v.tipo as vagone_tipo'
+            )
+            ->first();
+
+        if (!$intervento) {
+            return Redirect::to('manutentore/dashboard')->with('error', 'Intervento non trovato o non assegnato a te');
+        }
+
+        return View::make('manutentore.intervento', compact('utente', 'intervento'));
+    }
+
+    public function manutentore_invia_report($id, Request $request)
+    {
+        $utente = $this->_check_manutentore();
+
+        $intervento = DB::table('interventi')
+            ->where('id', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('id_operatore_assegnato', $utente->id)
+            ->first();
+
+        if (!$intervento) {
+            return Redirect::to('manutentore/dashboard')->with('error', 'Intervento non trovato');
+        }
+        if ((int) $intervento->step_corrente !== 3) {
+            return Redirect::to('manutentore/intervento/'.$id)->with('error', 'L\'intervento non è in fase di report (step 3)');
+        }
+
+        $report = trim((string) $request->input('report_danni', ''));
+        if ($report === '') {
+            return Redirect::to('manutentore/intervento/'.$id)->with('error', 'Inserisci il report danni');
+        }
+
+        DB::table('interventi')->where('id', $id)->update(['report_danni' => $report]);
+        $this->_intervento_avanza_step($id, (int) $utente->id_azienda, (int) $utente->id, 3, 'completato', 'Report danni inviato dal manutentore');
+
+        return Redirect::to('manutentore/dashboard')->with('success', 'Report inviato. L\'intervento passa all\'ufficio per l\'emissione del preventivo.');
+    }
+
+    // ============================================================
     // INTERVENTI MANUTENZIONE - workflow 6-step
     // ============================================================
 
