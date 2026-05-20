@@ -4582,6 +4582,22 @@ ORDER BY s.data_scadenza ASC',
                 return in_array($key, $colonneDotes, true);
             }, ARRAY_FILTER_USE_KEY);
 
+            // Se è cambiato il cliente via cd_cf, riallinea id_cliente e snapshot anagrafici
+            if (!empty($datiDotes['cd_cf'])) {
+                $cli = DB::table('clienti')
+                    ->where('id_azienda', $utente->id_azienda)
+                    ->where('cd_cf', $datiDotes['cd_cf'])
+                    ->first();
+                if ($cli) {
+                    $datiDotes['id_cliente'] = $cli->id;
+                    if (empty($datiDotes['ragione_sociale'])) $datiDotes['ragione_sociale'] = $cli->ragione_sociale;
+                    if (empty($datiDotes['partita_iva']))     $datiDotes['partita_iva']     = $cli->piva ?? null;
+                    if (empty($datiDotes['indirizzo']))       $datiDotes['indirizzo']       = $cli->indirizzo ?? null;
+                    if (empty($datiDotes['comune']))          $datiDotes['comune']          = $cli->comune ?? null;
+                    if (empty($datiDotes['cap']))             $datiDotes['cap']             = $cli->cap ?? null;
+                    if (empty($datiDotes['pec']))             $datiDotes['pec']             = $cli->pec ?? null;
+                }
+            }
 
             $datiDotes['id_azienda'] = $utente->id_azienda; // Aggiungi l'azienda
             if (isset($datiDotes['imponibile'])) $datiDotes['imponibile'] = (float)str_replace(['€', ' '], '', $datiDotes['imponibile']);

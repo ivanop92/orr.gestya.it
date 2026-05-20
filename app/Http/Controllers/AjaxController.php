@@ -177,11 +177,17 @@ class AjaxController extends Controller {
 
         $dati = $request->all();
         $tabella = (isset($dati['tipo']) && $dati['tipo'] == 'fornitore') ? 'fornitori' : 'clienti';
-        $cliente = DB::table($tabella)->where('id_azienda',  $utente->id_azienda)->where('id', $dati['id'])->first();
+        $q = DB::table($tabella)->where('id_azienda',  $utente->id_azienda);
+        if (!empty($dati['id'])) {
+            $q->where('id', $dati['id']);
+        } elseif (!empty($dati['cd_cf'])) {
+            $q->where('cd_cf', $dati['cd_cf']);
+        } else {
+            return response()->json(null, 200);
+        }
+        $cliente = $q->first();
 
-        $result = $cliente;
-
-        return response()->json($result, 200);
+        return response()->json($cliente, 200);
     }
 
     public function modifica_testata_fattura($id)
