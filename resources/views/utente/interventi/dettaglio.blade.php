@@ -221,10 +221,12 @@
                                             <h6 class="mb-2"><i class="ri-shield-check-line me-1 text-info"></i>Certificato di Manutenzione</h6>
                                             @if($intervento->id_dotes_certificato)
                                                 <p class="mb-2 small text-success"><i class="ri-check-line"></i> Già emesso</p>
-                                                <a href="/utente/interventi/{{ $intervento->id }}/certificato/pdf" class="btn btn-sm btn-soft-primary" target="_blank">
-                                                    <i class="ri-file-pdf-line"></i> Scarica PDF
+                                                <a href="/utente/interventi/{{ $intervento->id }}/release_to_service/pdf" class="btn btn-sm btn-soft-primary" target="_blank">
+                                                    <i class="ri-file-pdf-line"></i> Release to Service (VPI)
                                                 </a>
-                                                <a href="/utente/modifica_documento/{{ $intervento->id_dotes_certificato }}" class="btn btn-sm btn-soft-warning"><i class="ri-pencil-line"></i> Modifica</a>
+                                                <a href="/utente/interventi/{{ $intervento->id }}/certificato/pdf" class="btn btn-sm btn-soft-secondary" target="_blank" title="Certificato generico (vecchio formato)">
+                                                    Cert. generico
+                                                </a>
                                             @else
                                                 <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_certificato">
                                                     @csrf
@@ -462,6 +464,37 @@
                         </div>
                     </div>
                 @endif
+
+                {{-- DOCUMENTI UFFICIALI VPI/VTG --}}
+                <div class="card">
+                    <div class="card-header bg-soft-info">
+                        <h5 class="card-title mb-0"><i class="ri-file-pdf-line me-2"></i>Documenti ufficiali scaricabili</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="/utente/interventi/{{ $intervento->id }}/modulo_odl/pdf" target="_blank" class="btn btn-sm btn-soft-primary">
+                                <i class="ri-file-list-3-line me-1"></i>Modulo OdL ORR
+                            </a>
+                            <a href="/utente/interventi/{{ $intervento->id }}/mobile_repair_report/pdf" target="_blank" class="btn btn-sm btn-soft-primary">
+                                <i class="ri-tools-line me-1"></i>Mobile Repair Report (VPI-EMG 10)
+                            </a>
+                            <a href="/utente/interventi/{{ $intervento->id }}/release_to_service/pdf" target="_blank" class="btn btn-sm btn-soft-primary">
+                                <i class="ri-shield-check-line me-1"></i>Release to Service (VPI-EMG 01)
+                            </a>
+                            @if($intervento->id_dotes_preventivo)
+                                <a href="/utente/interventi/{{ $intervento->id }}/preventivo/pdf" target="_blank" class="btn btn-sm btn-soft-success">
+                                    <i class="ri-file-text-line me-1"></i>Invoice Receipt (Preventivo)
+                                </a>
+                            @endif
+                            @if($intervento->id_dotes_fattura)
+                                <a href="/utente/interventi/{{ $intervento->id }}/fattura/pdf" target="_blank" class="btn btn-sm btn-soft-success">
+                                    <i class="ri-bill-line me-1"></i>Invoice Receipt (Fattura)
+                                </a>
+                            @endif
+                        </div>
+                        <p class="text-muted small mt-2 mb-0">Modulo OdL, Mobile Repair Report e Release to Service sono sempre disponibili. Preventivo e Fattura appaiono dopo la creazione del relativo documento.</p>
+                    </div>
+                </div>
 
                 {{-- LOG --}}
                 <div class="card">

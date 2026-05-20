@@ -12974,6 +12974,510 @@ ORDER BY s.data_scadenza ASC',
         return Redirect::to('utente/interventi/'.$id)->with('success', 'Certificato di Manutenzione creato. Puoi scaricarlo in PDF dallo step 4.');
     }
 
+    /**
+     * Release to service - layout VPI-EMG 01 Annex 15-1
+     * Documento ufficiale di reimmissione in servizio del rotabile ferroviario.
+     */
+    public function interventi_release_to_service_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->leftJoin('utenti as rm', 'rm.id', '=', 'i.id_responsabile_manutenzione')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_rs',
+                'v.codice as vagone_codice', 'v.tipo as vagone_tipo', 'v.numero_uic as vagone_uic',
+                'v.peso_a_vuoto_kg', 'v.portata_massima_kg', 'v.lunghezza_metri',
+                'v.data_immatricolazione', 'v.data_ultima_revisione_generale',
+                'op.nome as op_nome', 'op.cognome as op_cognome',
+                'rm.nome as rm_nome', 'rm.cognome as rm_cognome'
+            )
+            ->first();
+        if (!$i) abort(404, 'Intervento non trovato');
+
+        $az = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $dt = function ($v) { return $v ? date('d-m-Y', strtotime($v)) : ''; };
+        $rmLabel = $i->rm_nome ? trim($i->rm_nome.' '.$i->rm_cognome) : '';
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4',
+            'margin_left' => 10, 'margin_right' => 10,
+            'margin_top' => 10, 'margin_bottom' => 12,
+            'default_font' => 'helvetica', 'default_font_size' => 8,
+        ]);
+
+        $html = '<style>
+            body { font-family: helvetica, sans-serif; color: #000; font-size: 8pt; }
+            h1 { font-size: 14pt; font-weight: bold; margin: 0 0 6pt; }
+            table { border-collapse: collapse; width: 100%; }
+            .box td { border: 1px solid #000; padding: 3pt 5pt; vertical-align: top; font-size: 8pt; }
+            .lbl { background: #e0e0e0; font-weight: bold; font-size: 7pt; }
+            .sub { background: #f5f5f5; font-weight: bold; }
+            .azhdr { text-align: right; font-size: 8pt; }
+            .azhdr strong { font-size: 10pt; }
+            .small { font-size: 7pt; }
+            .check-cell { font-family: DejaVuSans, sans-serif; }
+        </style>';
+
+        // Header titolo + azienda
+        $html .= '<table><tr>
+            <td width="60%"><h1>Release to service</h1></td>
+            <td width="40%" class="azhdr">
+                <strong>'.$esc($az->ragione_sociale ?? '').'</strong><br>
+                <span class="small">'.$esc($az->indirizzo ?? '').'</span><br>
+                <span class="small">'.$esc($az->cap ?? '').' '.$esc($az->comune ?? '').' ('.$esc($az->provincia ?? '').')</span><br>
+                <span class="small">P.IVA: '.$esc($az->partita_iva ?? '').'</span>
+            </td>
+        </tr></table>';
+
+        // Riga 1: Wagon number / Order number / Workshop / Logo azienda
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="28%" class="lbl">Wagon number:</td>
+            <td width="28%" class="lbl">Order number:</td>
+            <td width="22%" class="lbl">Workshop short code:</td>
+            <td width="22%" rowspan="2"></td>
+        </tr><tr>
+            <td>'.$esc($i->vagone_codice ?: $i->automezzo).'</td>
+            <td>'.$esc($i->odl_numero ?: '').'/'.($i->data_apertura ? date('Y', strtotime($i->data_apertura)) : date('Y')).'</td>
+            <td>'.$esc($az->ragione_sociale ?? '').'</td>
+        </tr></table>';
+
+        // Riga 2: Keeper/ECM / Customer order / Created on
+        $html .= '<table class="box"><tr>
+            <td width="28%" class="lbl">Keeper/ECM:</td>
+            <td width="28%" class="lbl">Customer order number:</td>
+            <td width="44%" class="lbl">Created on:</td>
+        </tr><tr>
+            <td>'.$esc($i->cliente_rs ?: '').'</td>
+            <td>'.$esc($i->numero_ordine_cliente ?: '').'</td>
+            <td>'.$dt($i->data_apertura).'</td>
+        </tr></table>';
+
+        // Date arrivo/partenza/livello
+        $html .= '<table class="box" style="margin-top:4pt;"><tr>
+            <td width="28%" class="lbl">Arrival date:</td>
+            <td width="28%" class="lbl">Departure date:</td>
+            <td width="44%" class="lbl">Maintenance level performed:</td>
+        </tr><tr>
+            <td>'.$dt($i->data_apertura).'</td>
+            <td>'.date('d-m-Y').'</td>
+            <td>'.$esc($i->codice_cuu ?: '').'</td>
+        </tr></table>';
+
+        // Tare weight / Type / Cycle / Date / Extension
+        $tare = $i->peso_a_vuoto_kg ? number_format($i->peso_a_vuoto_kg, 0, '', '').' kg' : '';
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="20%" class="lbl">Wagon number old:</td>
+            <td width="20%" class="lbl">Tare weight:</td>
+            <td width="12%" class="lbl">Type:</td>
+            <td width="12%" class="lbl">Cycle:</td>
+            <td width="12%" class="lbl">Date:</td>
+            <td width="12%" class="lbl">Extension:</td>
+        </tr><tr>
+            <td>'.$esc($i->matricola_carro_old ?: '-').'</td>
+            <td>'.$esc($tare).'</td>
+            <td>'.$esc($i->vagone_tipo ?: '').'</td>
+            <td class="small">6Irev/ari-dts</td>
+            <td>'.$dt($i->vagone_data_ultima_revisione_generale ?? null).'</td>
+            <td></td>
+        </tr></table>';
+
+        // Bogie type / inscriptions
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="50%"><span class="lbl">Bogie type:</span> '.$esc($i->vagone_tipo ?: '').'</td>
+            <td width="50%"><span class="lbl">Brake type:</span> KE-GP-A</td>
+        </tr></table>';
+
+        // Other information (note + report danni)
+        $otherInfo = '';
+        if (!empty($i->report_danni)) $otherInfo .= $esc($i->report_danni)."\n\n";
+        if (!empty($i->note))         $otherInfo .= $esc($i->note);
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td class="lbl">Other information (in accordance with the specification of the ECM):</td>
+        </tr><tr>
+            <td style="height: 80pt; white-space: pre-wrap;">'.$otherInfo.'</td>
+        </tr></table>';
+
+        // Dichiarazione standard
+        $html .= '<div class="small" style="margin-top:8pt; text-align:justify;">';
+        $html .= 'The above entries correspond to the condition of the wagon and the inscriptions found on the wagon. All work was performed properly. The wagon is safe for service. We hereby certify that this wagon is leaving our workshop according to the applicable laws and ordinances, the regulations of the keeper and the RID (if applicable).';
+        $html .= '</div>';
+
+        // Firma responsabile ECM
+        $html .= '<table class="box" style="margin-top:10pt;"><tr>
+            <td width="30%" class="lbl">Email:</td>
+            <td width="20%" class="lbl">Telephone no.:</td>
+            <td width="15%" class="lbl">Fax no.:</td>
+            <td width="35%" class="lbl">Name (of the responsible employee):</td>
+        </tr><tr>
+            <td>'.$esc($az->email_ricezione_fatture ?? '').'</td>
+            <td>Tel.: 081 5127059</td>
+            <td>-</td>
+            <td>ECM '.$esc($az->ragione_sociale ?? '').': '.$esc($rmLabel ?: '').'</td>
+        </tr></table>';
+
+        // Footer documento
+        $html .= '<div class="small" style="margin-top:14pt; color:#666;">';
+        $html .= 'VPI-EMG 01 Annex 15-1 | Version: 01/12/2024<br>Translation: 10/12/2024';
+        $html .= '</div>';
+
+        $mpdf->WriteHTML($html);
+        return $mpdf->Output('release_to_service_'.($i->vagone_codice ?: $id).'.pdf', 'D');
+    }
+
+    /**
+     * Mobile repair report - layout VPI-EMG 10 Annex 2
+     * Report compilato dal manutentore sul posto: lavori eseguiti, componenti sostituiti,
+     * Release confirmation con doppio check 'Repair' + 'Release to service'.
+     */
+    public function interventi_mobile_repair_report_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as rm', 'rm.id', '=', 'i.id_responsabile_manutenzione')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_rs',
+                'v.codice as vagone_codice', 'v.tipo as vagone_tipo', 'v.peso_a_vuoto_kg',
+                'rm.nome as rm_nome', 'rm.cognome as rm_cognome'
+            )
+            ->first();
+        if (!$i) abort(404, 'Intervento non trovato');
+
+        $az = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+        $materiali = DB::table('interventi_materiali')->where('id_intervento', $id)->get();
+
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $dt  = function ($v) { return $v ? date('d-m-Y', strtotime($v)) : ''; };
+        $rmLabel = $i->rm_nome ? trim($i->rm_nome.' '.$i->rm_cognome) : '';
+        $tare = $i->peso_a_vuoto_kg ? number_format($i->peso_a_vuoto_kg, 0, '', '').' kg' : '';
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4',
+            'margin_left' => 10, 'margin_right' => 10,
+            'margin_top' => 10, 'margin_bottom' => 12,
+            'default_font' => 'helvetica', 'default_font_size' => 8,
+        ]);
+
+        $html = '<style>
+            body { font-family: helvetica, sans-serif; color: #000; font-size: 8pt; }
+            h1 { font-size: 14pt; font-weight: bold; margin: 0 0 6pt; }
+            table { border-collapse: collapse; width: 100%; }
+            .box td { border: 1px solid #000; padding: 3pt 5pt; vertical-align: top; font-size: 8pt; }
+            .lbl { background: #e0e0e0; font-weight: bold; font-size: 7pt; }
+            .azhdr { text-align: right; font-size: 8pt; }
+            .azhdr strong { font-size: 10pt; }
+            .small { font-size: 7pt; }
+            .area { height: 90pt; white-space: pre-wrap; vertical-align: top; }
+        </style>';
+
+        $html .= '<table><tr>
+            <td width="60%"><h1>Mobile repair report</h1></td>
+            <td width="40%" class="azhdr">
+                <strong>'.$esc($az->ragione_sociale ?? '').'</strong><br>
+                <span class="small">'.$esc($az->indirizzo ?? '').'</span><br>
+                <span class="small">'.$esc($az->cap ?? '').' '.$esc($az->comune ?? '').' ('.$esc($az->provincia ?? '').')</span><br>
+                <span class="small">P.IVA: '.$esc($az->partita_iva ?? '').'</span>
+            </td>
+        </tr></table>';
+
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="28%" class="lbl">Wagon number:</td>
+            <td width="28%" class="lbl">Order number:</td>
+            <td width="22%" class="lbl">Workshop short code:</td>
+            <td width="22%" rowspan="2"></td>
+        </tr><tr>
+            <td>'.$esc($i->vagone_codice ?: $i->automezzo).'</td>
+            <td>'.$esc($i->odl_numero ?: '').'/'.($i->data_apertura ? date('Y', strtotime($i->data_apertura)) : date('Y')).'</td>
+            <td>'.$esc($az->ragione_sociale ?? '').'</td>
+        </tr></table>';
+
+        $html .= '<table class="box"><tr>
+            <td width="28%" class="lbl">Keeper/ECM:</td>
+            <td width="28%" class="lbl">Customer order number:</td>
+            <td width="44%" class="lbl">Produced on:</td>
+        </tr><tr>
+            <td>'.$esc($i->cliente_rs ?: '').'</td>
+            <td>'.$esc($i->numero_ordine_cliente ?: '').'</td>
+            <td>'.date('d-m-Y').'</td>
+        </tr></table>';
+
+        $html .= '<table class="box" style="margin-top:4pt;"><tr>
+            <td width="50%" class="lbl">Mobile repair performed on:</td>
+            <td width="50%" class="lbl">Maintenance level performed:</td>
+        </tr><tr>
+            <td>'.$esc(strtoupper($i->impianto ?: $i->localita ?: '')).'</td>
+            <td>'.$esc($i->codice_cuu ?: '').'</td>
+        </tr></table>';
+
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="20%" class="lbl">Old wagon number:</td>
+            <td width="20%" class="lbl">Tare weight:</td>
+            <td width="12%" class="lbl">Type:</td>
+            <td width="12%" class="lbl">Cycle:</td>
+            <td width="12%" class="lbl">Date:</td>
+            <td width="12%" class="lbl">Extension:</td>
+        </tr><tr>
+            <td>'.$esc($i->matricola_carro_old ?: '-').'</td>
+            <td>'.$esc($tare).'</td>
+            <td>'.$esc($i->vagone_tipo ?: '').'</td>
+            <td class="small">6Irev/ari-dts</td>
+            <td></td>
+            <td></td>
+        </tr></table>';
+
+        // Repair work performed (report del manutentore)
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td class="lbl">Repair work performed:</td>
+        </tr><tr>
+            <td class="area">'.$esc($i->report_danni ?: '').'</td>
+        </tr></table>';
+
+        $html .= '<table class="box" style="margin-top:4pt;"><tr>
+            <td class="lbl">Postponed work (including reason):</td>
+        </tr><tr>
+            <td class="area">-</td>
+        </tr></table>';
+
+        // Replaced components (dai materiali consumati)
+        $replaced = '';
+        foreach ($materiali as $m) {
+            $qta = rtrim(rtrim(number_format($m->qta, 3, ',', '.'), '0'), ',');
+            $replaced .= 'N° '.$qta.' '.$m->descrizione."\n";
+        }
+        $html .= '<table class="box" style="margin-top:4pt;"><tr>
+            <td class="lbl">Replaced components:</td>
+        </tr><tr>
+            <td class="area">'.$esc(trim($replaced) ?: '-').'</td>
+        </tr></table>';
+
+        $html .= '<table class="box" style="margin-top:4pt;"><tr>
+            <td class="lbl">Other information (as specified by keeper/ECM):</td>
+        </tr><tr>
+            <td class="area">'.$esc($i->note ?: '-').'</td>
+        </tr></table>';
+
+        // Release confirmation
+        $html .= '<table class="box" style="margin-top:6pt;"><tr><td colspan="2" class="lbl">Release confirmation</td></tr>';
+        $html .= '<tr><td width="22%">[X] Repair</td><td>The described work steps were performed correctly and completely.</td></tr>';
+        $html .= '<tr><td>[X] Release to service</td><td class="small">The additional check as per VPI-EMG 01, Annex 19, found no fault. We hereby certify that this wagon corresponds to the applicable laws and ordinances, the regulations of the keeper/ECM and the RID (if applicable).</td></tr>';
+        $html .= '</table>';
+
+        // Firma responsabile
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="35%" class="lbl">Name (of the responsible employee):</td>
+            <td width="20%" class="lbl">Telephone no.:</td>
+            <td width="20%" class="lbl">Date of issue:</td>
+            <td width="25%" class="lbl">Email:</td>
+        </tr><tr>
+            <td>ECM '.$esc($az->ragione_sociale ?? '').': '.$esc($rmLabel ?: '').'</td>
+            <td>Tel.: 081 5127059</td>
+            <td>'.date('d-m-Y').'</td>
+            <td>'.$esc($az->email_ricezione_fatture ?? '').'</td>
+        </tr></table>';
+
+        $html .= '<div class="small" style="margin-top:14pt; color:#666;">VPI-EMG 10 Annex 2 | Edition: 01/12/2024<br>Translation: 10/12/2024</div>';
+
+        $mpdf->WriteHTML($html);
+        return $mpdf->Output('mobile_repair_report_'.($i->vagone_codice ?: $id).'.pdf', 'D');
+    }
+
+    /**
+     * Modulo OdL ORR - apertura ordine di lavoro interno
+     * Documento interno con dati cliente, matricola, codice avaria CUU,
+     * personale incaricato (RM/CS/OP), tabella controlli e firme.
+     */
+    public function interventi_modulo_odl_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->leftJoin('utenti as cs', 'cs.id', '=', 'i.id_capo_squadra')
+            ->leftJoin('utenti as rm', 'rm.id', '=', 'i.id_responsabile_manutenzione')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_rs',
+                'v.codice as vagone_codice',
+                'op.nome as op_nome', 'op.cognome as op_cognome',
+                'cs.nome as cs_nome', 'cs.cognome as cs_cognome',
+                'rm.nome as rm_nome', 'rm.cognome as rm_cognome'
+            )
+            ->first();
+        if (!$i) abort(404, 'Intervento non trovato');
+
+        $az = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+        // Righe da intervento: prima cerca lavorazioni proposte (manutentore), poi righe del preventivo
+        $righe = DB::table('interventi_lavorazioni_proposte')->where('id_intervento', $id)->orderBy('ordinamento')->get();
+        if ($righe->count() === 0 && $i->id_dotes_preventivo) {
+            $righe = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
+        }
+
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $opLabel = $i->op_nome ? trim($i->op_nome.' '.$i->op_cognome) : '';
+        $csLabel = $i->cs_nome ? trim($i->cs_nome.' '.$i->cs_cognome) : '';
+        $rmLabel = $i->rm_nome ? trim($i->rm_nome.' '.$i->rm_cognome) : '';
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4',
+            'margin_left' => 8, 'margin_right' => 8,
+            'margin_top' => 8, 'margin_bottom' => 10,
+            'default_font' => 'helvetica', 'default_font_size' => 8,
+        ]);
+
+        $html = '<style>
+            body { font-family: helvetica, sans-serif; color: #000; font-size: 8pt; }
+            h1 { font-size: 14pt; font-weight: bold; margin: 0; }
+            table { border-collapse: collapse; width: 100%; }
+            .b td { border: 1px solid #000; padding: 3pt 5pt; vertical-align: top; }
+            .lbl { background: #d6d6d6; font-weight: bold; font-size: 8pt; }
+            .lbl-italic { font-style: italic; text-align: center; padding: 4pt; }
+            .small { font-size: 7pt; }
+            .checkbox { font-family: DejaVuSans, sans-serif; }
+            .sez-title { background: #b8c1d6; text-align: center; font-weight: bold; padding: 4pt; }
+        </style>';
+
+        $html .= '<table><tr>
+            <td width="30%"><strong>ORR SRL</strong><br><span class="small">OFFICINA RIPARAZIONE ROTABILI</span></td>
+            <td width="40%" class="lbl-italic">Descrizione Attivita da eseguire</td>
+            <td width="30%" style="text-align:right;"><strong>Mod. OdL</strong></td>
+        </tr></table>';
+
+        // CLIENTE / IMPIANTO
+        $html .= '<table class="b" style="margin-top:4pt;"><tr>
+            <td width="20%" class="lbl">CLIENTE:</td>
+            <td width="30%">'.$esc($i->cliente_rs ?: '').'</td>
+            <td width="20%" class="lbl">IMPIANTO:</td>
+            <td width="30%">'.$esc(strtoupper($i->impianto ?: $i->localita ?: '')).'</td>
+        </tr></table>';
+
+        // OdL n / DATA
+        $html .= '<table class="b"><tr>
+            <td width="20%" class="lbl">OdL n°:</td>
+            <td width="30%">'.$esc($i->odl_numero ?: $id).' / '.($i->data_apertura ? date('Y', strtotime($i->data_apertura)) : date('Y')).'</td>
+            <td width="20%" class="lbl">DATA INTERVENTO:</td>
+            <td width="30%">'.($i->data_apertura ? date('d/m/Y', strtotime($i->data_apertura)) : '').'</td>
+        </tr></table>';
+
+        // PdM Riferimento + ricambi
+        $html .= '<table class="b"><tr>
+            <td width="40%" class="lbl">PdM di Riferimento:</td>
+            <td width="60%">'.$esc($i->pdm_riferimento ?: 'VPI').' &nbsp; &nbsp; <span class="small">Ricambi forniti dal detentore [&nbsp;&nbsp;] - Ricambi reperiti da ORR [&nbsp;&nbsp;]</span></td>
+        </tr></table>';
+
+        // Matricola Carro / Cod Avaria / OdM cliente
+        $html .= '<table class="b" style="margin-top:6pt;"><tr>
+            <td width="33%" class="lbl" style="text-align:center;">Matricola Carro</td>
+            <td width="33%" class="lbl" style="text-align:center;">Cod Avaria CUU</td>
+            <td width="34%" class="lbl" style="text-align:center;">OdM cliente di Riferimento</td>
+        </tr><tr>
+            <td>Carro N°: '.$esc($i->vagone_codice ?: $i->automezzo).'</td>
+            <td>'.$esc($i->codice_cuu ?: '').'</td>
+            <td>'.$esc($i->numero_ordine_cliente ?: '').'</td>
+        </tr></table>';
+
+        // Personale Incaricato
+        $html .= '<table class="b" style="margin-top:6pt;"><tr>
+            <td width="33%" class="lbl">Personale Incaricato:</td>
+            <td width="33%" class="lbl" style="text-align:center;">Capo Squadra (CS)</td>
+            <td width="34%" class="lbl" style="text-align:center;">Operatore (OP)</td>
+        </tr><tr>
+            <td>Il RM: '.$esc($rmLabel).'</td>
+            <td>'.$esc($csLabel).'</td>
+            <td>'.$esc($opLabel).'</td>
+        </tr><tr>
+            <td colspan="2" class="lbl">Per accettazione il CS:</td>
+            <td></td>
+        </tr></table>';
+
+        // RIF. ISTRUZIONI LAVORO
+        $html .= '<table class="b" style="margin-top:6pt;"><tr>
+            <td class="lbl" width="30%">RIF. ISTRUZIONI LAVORO:</td>
+            <td>'.$esc($i->reason_intake ?: '').'</td>
+        </tr></table>';
+
+        // Sezione controlli
+        $html .= '<div class="sez-title" style="margin-top:6pt; border: 1px solid #000;">OPERAZIONI DI CORRETTIVA DA EFFETTUARE rif. PDM</div>';
+        $html .= '<table class="b">
+            <tr>
+                <td rowspan="2" width="18%" class="lbl" style="text-align:center;">MATRICOLA CARRO</td>
+                <td rowspan="2" width="32%" class="lbl" style="text-align:center;">DESCRIZIONE AVARIA<br>SEGNALATA DAL COMMITTENTE</td>
+                <td rowspan="2" width="8%" class="lbl" style="text-align:center;">Note</td>
+                <td colspan="3" class="lbl" style="text-align:center;">Controlli Eseguiti</td>
+            </tr>
+            <tr>
+                <td width="10%" class="lbl" style="text-align:center;">I°<br>Controllo</td>
+                <td width="10%" class="lbl" style="text-align:center;">II°<br>Controllo</td>
+                <td width="22%" class="lbl" style="text-align:center;">EVENTUALE AZIONE<br>CORRETTIVA INTRAPRESA</td>
+            </tr>';
+        if ($righe->count() > 0) {
+            $first = true;
+            foreach ($righe as $idx => $r) {
+                $html .= '<tr>
+                    <td>'.($first ? $esc($i->vagone_codice ?: $i->automezzo) : '').'</td>
+                    <td>'.$esc($r->descrizione).'</td>
+                    <td style="text-align:center;">[&nbsp;&nbsp;]</td>
+                    <td style="text-align:center;">NC</td>
+                    <td style="text-align:center;"></td>
+                    <td></td>
+                </tr>';
+                $first = false;
+            }
+        } else {
+            for ($k = 0; $k < 5; $k++) {
+                $html .= '<tr><td>&nbsp;</td><td>&nbsp;</td><td style="text-align:center;">[&nbsp;&nbsp;]</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+            }
+        }
+        $html .= '</table>';
+
+        // Note / Restrizioni d'uso
+        $html .= '<table class="b" style="margin-top:6pt;"><tr><td colspan="2" class="lbl-italic" style="background:#d6d6d6;">Note / Restrizioni D\'Uso</td></tr>';
+        $html .= '<tr><td colspan="2" style="height:30pt;"></td></tr></table>';
+
+        // Dichiarazione
+        $html .= '<div class="small" style="margin-top:6pt; text-align:justify; padding:4pt; border:1px solid #000;">';
+        $html .= 'Si certifica che le lavorazioni di manutenzione sul carro [X] ovvero sui carri indicati [&nbsp;&nbsp;] sono state eseguite da personale qualificato in conformita a quanto previsto dai PDM, dal CUU e dalle Specifiche Tecniche e disposizioni ricevute dall\'ECM. I materiali sono approvvigionati e conformi a quanto previsto dal CUU e dalle disposizioni ricevute dall\'ECM. Le attivita sono state effettuate nel rispetto del piano della qualita dell\'impresa e delle vigenti leggi in materia di sicurezza e igiene del lavoro e protezione ambientale. <strong>L\'esito del collaudo finale eseguito e:</strong>';
+        $html .= '</div>';
+
+        $html .= '<table class="b small"><tr>
+            <td width="33%">-a) [&nbsp;&nbsp;] Conforme — Reimmesso in Servizio a norma del Reg. 2019/779</td>
+            <td width="33%">-b) [&nbsp;&nbsp;] Non Conforme</td>
+            <td width="34%">-c) [&nbsp;&nbsp;] Restrizioni d\'uso applicate</td>
+        </tr></table>';
+
+        // Firme
+        $html .= '<table class="b" style="margin-top:6pt;"><tr>
+            <td width="33%" class="lbl">Firma RM</td>
+            <td width="33%" class="lbl">Firma CS</td>
+            <td width="34%" class="lbl">Firma OP</td>
+        </tr><tr>
+            <td style="height:40pt;">'.$esc($rmLabel).'</td>
+            <td>'.$esc($csLabel).'</td>
+            <td>'.$esc($opLabel).'</td>
+        </tr></table>';
+
+        $html .= '<div class="small" style="margin-top:4pt; color:#666;">C=CONFORME &nbsp; NC=NON CONFORME &nbsp; NA=NON APPLICABILE &nbsp; CS=CAPO SQUADRA &nbsp; OP=OPERATORE &nbsp; RM=Responsabile Manutenzione<br>Mod. OdL rev.4 del 10/10/22 pag. 1 di 1</div>';
+
+        $mpdf->WriteHTML($html);
+        return $mpdf->Output('odl_'.($i->odl_numero ?: $id).'.pdf', 'D');
+    }
+
     public function interventi_certificato_pdf($id, Request $request)
     {
         $this->is_loggato();
