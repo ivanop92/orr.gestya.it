@@ -28,7 +28,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         @endif
-        <form enctype="multipart/form-data" method="post" id="form_modifica_documento">
+        <form enctype="multipart/form-data" method="post" id="form_modifica_documento" novalidate>
             @csrf
             <div class="row justify-content-center">
                 <div class="col-xxl-9">
