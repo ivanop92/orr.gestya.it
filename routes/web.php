@@ -82,6 +82,7 @@ Route::any('manutentore/logout',array('uses'=>'UtenteController@logout'));
 Route::post('utente/applica_lavorazioni_a_documento/{id_dotes}',array('uses'=>'UtenteController@applica_lavorazioni_a_documento'));
 Route::post('utente/ajax/ordina_righe_documento/{id_dotes}',array('uses'=>'UtenteController@ordina_righe_documento'));
 Route::get('utente/ajax/lavorazione_righe/{id_lavorazione}',array('uses'=>'UtenteController@ajax_lavorazione_righe'));
+Route::get('utente/ajax/dotes_righe/{id_dotes_origine}',array('uses'=>'UtenteController@ajax_dotes_righe'));
 Route::post('utente/dorig/{id_riga}/duplica',array('uses'=>'UtenteController@dorig_duplica'));
 Route::post('utente/dorig/{id_riga}/aggiorna',array('uses'=>'UtenteController@dorig_aggiorna'));
 Route::post('utente/dorig/{id_riga}/elimina',array('uses'=>'UtenteController@dorig_elimina'));

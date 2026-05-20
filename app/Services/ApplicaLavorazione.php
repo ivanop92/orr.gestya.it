@@ -178,6 +178,86 @@ class ApplicaLavorazione
         return [true, $aggiunte.' righe singole aggiunte', $aggiunte];
     }
 
+    /**
+     * Copia tutte le righe di uno o più preventivi (dotes) esistenti nel documento corrente.
+     */
+    public static function applicaDaDotes(int $id_dotes_target, int $id_azienda, array $id_dotes_origine, int $id_utente): array
+    {
+        $target = DB::table('dotes')->where('id', $id_dotes_target)->where('id_azienda', $id_azienda)->first();
+        if (!$target) return [false, 'Documento target non trovato', 0];
+
+        $maxN = (int) DB::table('dorig')->where('id_dotes', $id_dotes_target)->where('id_azienda', $id_azienda)->max('n_riga');
+        $aggiunte = 0;
+
+        $righeSrc = DB::table('dorig')
+            ->whereIn('id_dotes', array_map('intval', $id_dotes_origine))
+            ->where('id_azienda', $id_azienda)
+            ->orderBy('id_dotes')
+            ->orderBy('n_riga')
+            ->get();
+
+        foreach ($righeSrc as $r) {
+            $maxN++;
+            $nuova = (array) $r;
+            unset($nuova['id']);
+            $nuova['id_dotes']  = $id_dotes_target;
+            $nuova['id_testata'] = $id_dotes_target;
+            $nuova['n_riga']    = $maxN;
+            $nuova['id_utente'] = $id_utente;
+            $nuova['cd_do']           = $target->cd_do;
+            $nuova['tipo_documento']  = $target->tipo_documento ?? null;
+            $nuova['numero_doc']      = $target->numero_doc ?? null;
+            $nuova['data_doc']        = $target->data_doc ?? null;
+            $nuova['id_cliente']      = $target->id_cliente ?? null;
+            DB::table('dorig')->insert($nuova);
+            $aggiunte++;
+        }
+
+        self::ricalcolaAggregatiDotes($id_dotes_target, $id_azienda);
+
+        if ($aggiunte === 0) return [false, 'Nessuna riga copiata dai preventivi selezionati', 0];
+        return [true, $aggiunte.' righe copiate da preventivi esistenti', $aggiunte];
+    }
+
+    /**
+     * Copia singole righe di dorig (di altri preventivi) nel documento corrente.
+     */
+    public static function applicaDaDorig(int $id_dotes_target, int $id_azienda, array $id_dorig, int $id_utente): array
+    {
+        $target = DB::table('dotes')->where('id', $id_dotes_target)->where('id_azienda', $id_azienda)->first();
+        if (!$target) return [false, 'Documento target non trovato', 0];
+
+        $maxN = (int) DB::table('dorig')->where('id_dotes', $id_dotes_target)->where('id_azienda', $id_azienda)->max('n_riga');
+        $aggiunte = 0;
+
+        $righeSrc = DB::table('dorig')
+            ->whereIn('id', array_map('intval', $id_dorig))
+            ->where('id_azienda', $id_azienda)
+            ->get();
+
+        foreach ($righeSrc as $r) {
+            $maxN++;
+            $nuova = (array) $r;
+            unset($nuova['id']);
+            $nuova['id_dotes']  = $id_dotes_target;
+            $nuova['id_testata'] = $id_dotes_target;
+            $nuova['n_riga']    = $maxN;
+            $nuova['id_utente'] = $id_utente;
+            $nuova['cd_do']           = $target->cd_do;
+            $nuova['tipo_documento']  = $target->tipo_documento ?? null;
+            $nuova['numero_doc']      = $target->numero_doc ?? null;
+            $nuova['data_doc']        = $target->data_doc ?? null;
+            $nuova['id_cliente']      = $target->id_cliente ?? null;
+            DB::table('dorig')->insert($nuova);
+            $aggiunte++;
+        }
+
+        self::ricalcolaAggregatiDotes($id_dotes_target, $id_azienda);
+
+        if ($aggiunte === 0) return [false, 'Nessuna riga copiata', 0];
+        return [true, $aggiunte.' righe copiate da altri preventivi', $aggiunte];
+    }
+
     public static function ricalcolaAggregatiDotes(int $id_dotes, int $id_azienda): void
     {
         $agg = DB::table('dorig')

@@ -11344,8 +11344,10 @@ ORDER BY s.data_scadenza ASC',
     {
         $this->is_loggato();
         $utente = session('utente');
-        $idsMacro = $request->input('id_lavorazioni', []);
-        $idsRighe = $request->input('id_lavorazioni_righe', []);
+        $idsMacro       = $request->input('id_lavorazioni', []);
+        $idsRighe       = $request->input('id_lavorazioni_righe', []);
+        $idsDotesOrig   = $request->input('id_dotes_origine', []);
+        $idsDorigOrig   = $request->input('id_dorig_origine', []);
 
         $nTot = 0;
         $msgs = [];
@@ -11366,10 +11368,38 @@ ORDER BY s.data_scadenza ASC',
             $msgs[] = $msg2;
         }
 
+        if (is_array($idsDotesOrig) && count($idsDotesOrig) > 0) {
+            [$ok3, $msg3, $n3] = \App\Services\ApplicaLavorazione::applicaDaDotes(
+                (int) $id_dotes, (int) $utente->id_azienda, $idsDotesOrig, (int) $utente->id
+            );
+            $nTot += (int) $n3;
+            $msgs[] = $msg3;
+        }
+
+        if (is_array($idsDorigOrig) && count($idsDorigOrig) > 0) {
+            [$ok4, $msg4, $n4] = \App\Services\ApplicaLavorazione::applicaDaDorig(
+                (int) $id_dotes, (int) $utente->id_azienda, $idsDorigOrig, (int) $utente->id
+            );
+            $nTot += (int) $n4;
+            $msgs[] = $msg4;
+        }
+
         if ($nTot === 0) {
             return redirect()->back()->with('error', 'Nessuna riga selezionata');
         }
         return redirect()->back()->with('success', implode(' · ', $msgs));
+    }
+
+    public function ajax_dotes_righe($id_dotes_origine, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $righe = DB::table('dorig')
+            ->where('id_dotes', $id_dotes_origine)
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('n_riga')
+            ->get();
+        return response()->json(['righe' => $righe]);
     }
 
     public function ajax_lavorazione_righe($id_lavorazione, Request $request)
