@@ -25,7 +25,20 @@
         </div>
 
         <!-- end page title -->
-        <form enctype="multipart/form-data" method="post">
+        @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="ri-check-line align-middle me-1"></i> {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        @if(session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="ri-error-warning-line align-middle me-1"></i> {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        <form enctype="multipart/form-data" method="post" id="form_modifica_documento" novalidate>
+            @csrf
 
 
             @if($modalita != 'crea')
@@ -552,13 +565,13 @@
                                                         </div>
                                                     </td>
                                                     <td>
-                                                        <input type="number" class="form-control product-price bg-light border-0" name="products[0][prezzo_unitario]" id="productRate-1" step="0.01" placeholder="0.00" {{ !in_array($cd_do, ['RDO', 'ORDF']) ? 'required' : '' }} />
+                                                        <input type="text" inputmode="decimal" class="form-control product-price bg-light border-0 num-decimal" name="products[0][prezzo_unitario]" id="productRate-1" step="0.01" placeholder="0.00" {{ !in_array($cd_do, ['RDO', 'ORDF']) ? 'required' : '' }} />
                                                         @if(!in_array($cd_do, ['RDO', 'ORDF']))
                                                         <div class="invalid-feedback">Please enter a rate</div>
                                                         @endif
                                                     </td>
                                                     <td>
-                                                        <input type="number" class="form-control product-discount bg-light border-0" name="products[0][sconto_perc]" id="productDiscount-1" min="0" max="100" step="0.01" value="0" placeholder="0" onchange="updatePrice(1)" onkeyup="updatePrice(1)" />
+                                                        <input type="text" inputmode="decimal" class="form-control product-discount bg-light border-0 num-decimal" name="products[0][sconto_perc]" id="productDiscount-1" min="0" max="100" step="0.01" value="0" placeholder="0" onchange="updatePrice(1)" onkeyup="updatePrice(1)" />
                                                     </td>
 
                                                     <td>
@@ -574,7 +587,7 @@
                                                                 </div>
 
                                                                 <div class="col-md-4">
-                                                                    <input type="number" style="width: 50px" class="product-vat form-control  bg-light border-0" name="products[0][iva]" id="productIva-1" value="22" step="0.01" placeholder="0%" required />
+                                                                    <input type="text" inputmode="decimal" style="width: 50px" class="product-vat form-control bg-light border-0 num-decimal" name="products[0][iva]" id="productIva-1" value="22" step="0.01" placeholder="0%" required />
                                                                 </div>
 
                                                                 <div class="col-md-12">
@@ -588,7 +601,7 @@
                                                     <td>
                                                         <div class="row">
                                                             <div class="col-md-6">
-                                                                <input type="number" class="form-control bg-light border-0"
+                                                                <input type="text" class="form-control bg-light border-0"
                                                                        name="products[0][lotto]"
                                                                        id="productLotto-1"
                                                                        placeholder="Lotto" />
@@ -603,7 +616,7 @@
                                                         </div>
                                                     </td>
                                                     <td>
-                                                        <input type="number" class="form-control bg-light border-0 product-quantity" name="products[0][qta]" id="product-qty-1" value="1" min="0" step="1" oninput="updatePrice(1)">
+                                                        <input type="text" inputmode="decimal" class="form-control bg-light border-0 product-quantity num-decimal" name="products[0][qta]" id="product-qty-1" value="1" min="0" step="1" oninput="updatePrice(1)">
                                                     </td>
                                                     <td>
                                                         <input type="text" style="width: 50px" class="form-control bg-light border-0" name="products[0][um]" id="productUm-1" placeholder="UM">
@@ -699,13 +712,13 @@
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <input type="number" class="form-control product-price bg-light border-0" value="{{ $d->prezzo_unitario }}" name="products[{{ $d->id }}][prezzo_unitario]" id="productRate-{{ $index + 1 }}" step="0.01" placeholder="0.00" @if(!in_array($dotes->cd_do, ['RDO', 'ORDF'])) required @endif />
+                                                            <input type="text" inputmode="decimal" class="form-control product-price bg-light border-0 num-decimal" value="{{ $d->prezzo_unitario }}" name="products[{{ $d->id }}][prezzo_unitario]" id="productRate-{{ $index + 1 }}" step="0.01" placeholder="0.00" @if(!in_array($dotes->cd_do, ['RDO', 'ORDF'])) required @endif />
                                                             <div class="invalid-feedback">
                                                                 Please enter a rate
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <input type="number" class="form-control product-discount bg-light border-0" name="products[{{ $d->id }}][sconto_perc]" id="productDiscount-{{ $index + 1 }}" min="0" max="100" step="0.01" value="{{ $d->sconto_perc ?? 0 }}" placeholder="0" onchange="updatePrice({{ $index + 1 }})" onkeyup="updatePrice({{ $index + 1 }})" />
+                                                            <input type="text" inputmode="decimal" class="form-control product-discount bg-light border-0 num-decimal" name="products[{{ $d->id }}][sconto_perc]" id="productDiscount-{{ $index + 1 }}" min="0" max="100" step="0.01" value="{{ $d->sconto_perc ?? 0 }}" placeholder="0" onchange="updatePrice({{ $index + 1 }})" onkeyup="updatePrice({{ $index + 1 }})" />
                                                         </td>
 
                                                         <td>
@@ -721,7 +734,7 @@
                                                                     </div>
 
                                                                     <div class="col-md-4">
-                                                                        <input type="number" style="width: 50px" class="product-vat form-control  bg-light border-0" name="products[{{ $d->id }}][iva]" id="productIva-{{ $index + 1 }}" value="22" step="0.01" placeholder="0%" required />
+                                                                        <input type="text" inputmode="decimal" style="width: 50px" class="product-vat form-control bg-light border-0 num-decimal" name="products[{{ $d->id }}][iva]" id="productIva-{{ $index + 1 }}" value="22" step="0.01" placeholder="0%" required />
                                                                     </div>
 
                                                                     <div class="col-md-12">
@@ -734,7 +747,7 @@
                                                         <td>
                                                             <div class="row">
                                                                 <div class="col-md-6">
-                                                                    <input type="number" class="form-control bg-light border-0"
+                                                                    <input type="text" class="form-control bg-light border-0"
                                                                            name="products[{{ $d->id }}][lotto]"
                                                                            id="productLotto-{{ $index + 1 }}"
                                                                            value="{{ $d->lotto }}"
@@ -751,7 +764,7 @@
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <input type="number" class="form-control bg-light border-0 product-quantity" name="products[{{ $d->id }}][qta]" id="product-qty-{{ $index + 1 }}" value="{{ $d->qta }}" min="0" step="1" oninput="updatePrice({{ $index + 1 }})">
+                                                            <input type="text" inputmode="decimal" class="form-control bg-light border-0 product-quantity num-decimal" name="products[{{ $d->id }}][qta]" id="product-qty-{{ $index + 1 }}" value="{{ $d->qta }}" min="0" step="1" oninput="updatePrice({{ $index + 1 }})">
                                                         </td>
                                                         <td>
                                                             <input type="text" style="width: 50px" class="form-control bg-light border-0" name="products[{{ $d->id }}][um]" id="productUm-{{ $index + 1 }}" placeholder="UM" value="{{ $d->um }}">
@@ -835,7 +848,7 @@
                                                                 <div class="form-group">
                                                                     <label class="form-label">Importo</label>
                                                                     <div class="input-group">
-                                                                        <input type="number" class="form-control importo totale_importo_scadenza" step="0.01" value="0" id="totale_importo_scadenza" name="scadenziario[0][importo]">
+                                                                        <input type="text" inputmode="decimal" class="form-control importo totale_importo_scadenza num-decimal" value="0" id="totale_importo_scadenza" name="scadenziario[0][importo]">
                                                                         <span class="input-group-text">€</span>
                                                                     </div>
                                                                 </div>
@@ -911,7 +924,7 @@
                                                                 <div class="form-group">
                                                                     <label class="form-label">Importo</label>
                                                                     <div class="input-group">
-                                                                        <input type="number" class="form-control importo" step="0.01" onkeyup="updateTotals();"  name="scadenziario[<?php echo $i ?>][importo]" value="<?php echo $s->importo ?>">
+                                                                        <input type="text" inputmode="decimal" class="form-control importo num-decimal" onkeyup="updateTotals();"  name="scadenziario[<?php echo $i ?>][importo]" value="<?php echo $s->importo ?>">
                                                                         <span class="input-group-text">€</span>
                                                                     </div>
                                                                 </div>
@@ -1234,7 +1247,7 @@
                                 <td><?php echo $d->qta ?></td>
                                 <td><?php echo $d->qta_evasa ?></td>
                                 <td>
-                                    <input type="number" name="quantita_evasa[<?php echo $d->id ?>]" class="form-control" max="<?php echo $d->qta - $d->qta_evasa ?>" value="<?php echo $d->qta - $d->qta_evasa ?>">
+                                    <input type="text" inputmode="decimal" name="quantita_evasa[<?php echo $d->id ?>]" class="form-control num-decimal" value="<?php echo $d->qta - $d->qta_evasa ?>">
                                 </td>
                             </tr>
 
@@ -1336,6 +1349,20 @@ Cordiali saluti,
 
 <script src="https://unpkg.com/onscan.js/onscan.min.js"></script>
 <script>
+    // Sostituisce la virgola con il punto in tutti i campi decimali prima del submit.
+    // Permette agli utenti italiani di scrivere "0,30" o "1,5" senza errori HTML5.
+    document.addEventListener('DOMContentLoaded', function(){
+        var f = document.getElementById('form_modifica_documento');
+        if (!f) return;
+        f.addEventListener('submit', function(){
+            f.querySelectorAll('.num-decimal').forEach(function(el){
+                if (typeof el.value === 'string') {
+                    el.value = el.value.replace(',', '.').trim();
+                }
+            });
+        });
+    });
+
     function applicaPrezzoListino(index, idArticolo) {
         console.log("Applica prezzo listino chiamata per indice:", index, "articolo:", idArticolo);
 
@@ -1615,11 +1642,11 @@ Cordiali saluti,
                 </div>
             </td>
             <td>
-                <input type="number" class="form-control product-price bg-light border-0" name="products[${index}][prezzo_unitario]" id="productRate-${productCount}" step="0.01" placeholder="0.00" <?= !in_array($cd_do, ['RDO', 'ORDF']) ? 'required' : '' ?> />
+                <input type="text" inputmode="decimal" class="form-control product-price bg-light border-0 num-decimal" name="products[${index}][prezzo_unitario]" id="productRate-${productCount}" step="0.01" placeholder="0.00" <?= !in_array($cd_do, ['RDO', 'ORDF']) ? 'required' : '' ?> />
                 <?= !in_array($cd_do, ['RDO', 'ORDF']) ? '<div class="invalid-feedback">Please enter a rate</div>' : '' ?>
             </td>
             <td>
-                <input type="number" class="form-control product-discount bg-light border-0" name="products[${index}][sconto_perc]" id="productDiscount-${productCount}" min="0" max="100" step="0.01" value="0" placeholder="0" onchange="updatePrice(${productCount})" onkeyup="updatePrice(${productCount})" />
+                <input type="text" inputmode="decimal" class="form-control product-discount bg-light border-0 num-decimal" name="products[${index}][sconto_perc]" id="productDiscount-${productCount}" min="0" max="100" step="0.01" value="0" placeholder="0" onchange="updatePrice(${productCount})" onkeyup="updatePrice(${productCount})" />
             </td>
 
             <td>
@@ -1633,7 +1660,7 @@ Cordiali saluti,
         </select>
     </div>
     <div class="col-md-4">
-        <input type="number" style="width: 50px" class="product-vat form-control bg-light border-0" name="products[${index}][iva]" id="productIva-${productCount}" value="22" step="0.01" placeholder="0%" required />
+        <input type="text" inputmode="decimal" style="width: 50px" class="product-vat form-control bg-light border-0 num-decimal" name="products[${index}][iva]" id="productIva-${productCount}" value="22" step="0.01" placeholder="0%" required />
                         </div>
                         <div class="col-md-12">
                             <input type="text" readonly placeholder="Rif. Normativo" class="form-control" name="products[${index}][rif_normativo]" id="rif_normativo_${productCount}">
@@ -1645,7 +1672,7 @@ Cordiali saluti,
     <td>
         <div class="row">
             <div class="col-md-6">
-                <input type="number" class="form-control bg-light border-0"
+                <input type="text" class="form-control bg-light border-0"
                     name="products[${index}][lotto]"
                             id="productLotto-${productCount}"
                             placeholder="Lotto"
@@ -1661,7 +1688,7 @@ Cordiali saluti,
                 </div>
             </td>
             <td>
-                <input type="number" class="form-control bg-light border-0 product-quantity" name="products[${index}][qta]" id="product-qty-${productCount}" value="1" min="0" step="1" oninput="updatePrice(${productCount})">
+                <input type="text" inputmode="decimal" class="form-control bg-light border-0 product-quantity num-decimal" name="products[${index}][qta]" id="product-qty-${productCount}" value="1" min="0" step="1" oninput="updatePrice(${productCount})">
             </td>
             <td>
                 <input type="text" style="width: 50px" class="form-control bg-light border-0" name="products[${index}][um]" id="productUm-${productCount}" placeholder="UM">
