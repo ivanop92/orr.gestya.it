@@ -13,11 +13,28 @@
                     <?php } ?>
 
                     <div class="page-title-right">
-                        <!--
-                        <ol class="breadcrumb m-0">
-                            <li class="breadcrumb-item"><a href="javascript: void(0);">CRM</a></li>
-                            <li class="breadcrumb-item active">Contacts</li>
-                        </ol>-->
+                        @php
+                            $interventoCollegato = null;
+                            if (!empty($dotes->id) && \Illuminate\Support\Facades\Schema::hasTable('interventi')) {
+                                $interventoCollegato = DB::table('interventi')
+                                    ->where('id_azienda', $utente->id_azienda)
+                                    ->where(function($q) use ($dotes){
+                                        $q->where('id_dotes_preventivo', $dotes->id)
+                                          ->orWhere('id_dotes_certificato', $dotes->id)
+                                          ->orWhere('id_dotes_fattura', $dotes->id);
+                                    })
+                                    ->first();
+                            }
+                        @endphp
+                        @if($interventoCollegato)
+                            <a href="{{ url('utente/interventi/'.$interventoCollegato->id) }}" class="btn btn-primary">
+                                <i class="ri-arrow-left-line align-middle me-1"></i> Torna all'intervento
+                            </a>
+                        @elseif(!empty($dotes->cd_do))
+                            <a href="{{ url('utente/riepilogo_documenti/'.$dotes->cd_do) }}" class="btn btn-light">
+                                <i class="ri-arrow-left-line align-middle me-1"></i> Torna ai documenti
+                            </a>
+                        @endif
                     </div>
 
                 </div>
