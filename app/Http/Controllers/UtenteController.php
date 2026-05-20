@@ -12097,20 +12097,25 @@ ORDER BY s.data_scadenza ASC',
 
             $now = date('Y-m-d H:i:s');
             $id_int = DB::table('interventi')->insertGetId([
-                'id_azienda'     => $utente->id_azienda,
-                'id_utente'      => $utente->id,
-                'id_cliente'     => !empty($dati['id_cliente']) ? (int) $dati['id_cliente'] : null,
-                'id_vagone'      => $id_vagone,
-                'automezzo'      => $clean($dati['automezzo'] ?? null),
-                'data_apertura'  => $clean($dati['data_apertura'] ?? null) ?: date('Y-m-d'),
-                'reason_intake'  => $clean($dati['reason_intake'] ?? null),
-                'localita'       => $clean($dati['localita'] ?? null),
-                'priorita'       => $dati['priorita'] ?? 'media',
-                'note'           => $clean($dati['note'] ?? null),
-                'step_corrente'  => 1, // step 1 in corso fino a quando non lo completi
-                'stato'          => 'in_corso',
-                'created_at'     => $now,
-                'updated_at'     => $now,
+                'id_azienda'             => $utente->id_azienda,
+                'id_utente'              => $utente->id,
+                'id_cliente'             => !empty($dati['id_cliente']) ? (int) $dati['id_cliente'] : null,
+                'id_vagone'              => $id_vagone,
+                'automezzo'              => $clean($dati['automezzo'] ?? null),
+                'data_apertura'          => $clean($dati['data_apertura'] ?? null) ?: date('Y-m-d'),
+                'reason_intake'          => $clean($dati['reason_intake'] ?? null),
+                'localita'               => $clean($dati['localita'] ?? null),
+                'priorita'               => $dati['priorita'] ?? 'media',
+                'note'                   => $clean($dati['note'] ?? null),
+                'codice_cuu'             => $clean($dati['codice_cuu'] ?? null),
+                'numero_ordine_cliente'  => $clean($dati['numero_ordine_cliente'] ?? null),
+                'impianto'               => $clean($dati['impianto'] ?? null),
+                'pdm_riferimento'        => $clean($dati['pdm_riferimento'] ?? null) ?: 'VPI',
+                'odl_numero'             => $clean($dati['odl_numero'] ?? null),
+                'step_corrente'          => 1,
+                'stato'                  => 'in_corso',
+                'created_at'             => $now,
+                'updated_at'             => $now,
             ]);
 
             DB::table('interventi_log')->insert([
@@ -12267,6 +12272,147 @@ ORDER BY s.data_scadenza ASC',
         ]);
 
         return Redirect::to('utente/interventi/'.$id)->with('success', 'Step '.$stepCorrente.' completato. Passa allo step '.$nuovoStep.'.');
+    }
+
+    /**
+     * Genera PDF Invoice Receipt nel layout VTG (preventivo o fattura).
+     * Stesso layout per entrambi: cambia solo il titolo.
+     */
+    private function _genera_pdf_invoice_receipt($intervento, $dotes, $dorig, $az, string $tipo = 'preventivo'): string
+    {
+        $titolo = $tipo === 'fattura' ? 'FATTURA' : 'INVOICE RECEIPT';
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'margin_left' => 12, 'margin_right' => 12,
+            'margin_top' => 10,  'margin_bottom' => 12,
+            'default_font' => 'helvetica',
+            'default_font_size' => 9,
+        ]);
+
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $eur = function ($v) { return '&euro; '.number_format((float) $v, 2, ',', '.'); };
+        $num = function ($v, int $d = 2) { return number_format((float) $v, $d, ',', '.'); };
+
+        // === HEADER: dati destinatario (cliente VTG) ===
+        $html  = '<style>
+            body { font-family: helvetica, sans-serif; color: #000; font-size: 9pt; }
+            .title { font-size: 12pt; font-weight: bold; margin: 0 0 6pt; }
+            .small { font-size: 8pt; }
+            table { border-collapse: collapse; width: 100%; }
+            table.intestazione td { vertical-align: top; padding-bottom: 4pt; }
+            table.parties td { vertical-align: top; padding: 2pt 6pt 2pt 0; }
+            .lbl { font-weight: bold; }
+            .meta-tbl td { border: 1px solid #000; padding: 4pt 6pt; }
+            .meta-tbl .meta-lbl { background: #f0f0f0; font-weight: bold; width: 30%; }
+            .righe { margin-top: 6pt; }
+            .righe th { background: #e9e9e9; border: 1px solid #000; padding: 4pt 3pt; font-size: 8pt; font-weight: bold; text-align: center; vertical-align: middle; }
+            .righe td { border: 1px solid #000; padding: 4pt 3pt; font-size: 8pt; vertical-align: top; }
+            .righe td.r { text-align: right; }
+            .righe td.c { text-align: center; }
+            .sub { background: #d9d9d9; font-weight: bold; }
+            .tot { background: #ffffff; font-weight: bold; font-size: 11pt; }
+            .footer-firma td { border-top: 1px solid #000; padding: 4pt 6pt; font-weight: bold; }
+        </style>';
+
+        $html .= '<div class="title">'.$titolo.'</div>';
+        $html .= '<div>'.$esc($dotes->ragione_sociale).'</div>';
+        $html .= '<div>'.$esc($dotes->indirizzo).'</div>';
+        $html .= '<div>'.$esc($dotes->cap).' - '.strtoupper($esc($dotes->comune)).'</div>';
+        $html .= '<div>'.$esc($dotes->nazione ?: 'Italy').'</div>';
+        $html .= '<br>';
+
+        // === Contracting Party + Billing Address ===
+        $html .= '<table class="parties"><tr>
+            <td width="50%">
+                <div class="lbl">Contracting Party</div>
+                <table><tr><td width="80">Department</td><td>'.$esc($intervento->op_nome ?? '').'</td></tr>
+                <tr><td>Name</td><td>'.$esc($dotes->nominativo ?? '').'</td></tr>
+                <tr><td>Tel</td><td></td></tr>
+                <tr><td>Fax</td><td></td></tr>
+                <tr><td>Email</td><td>'.$esc($dotes->pec ?: '').'</td></tr>
+                <tr><td>Date</td><td>'.date('d/m/Y', strtotime($dotes->data_doc)).'</td></tr>
+                </table>
+            </td>
+            <td width="50%">
+                <div class="lbl">Billing Address</div>
+                <div>'.$esc($az->ragione_sociale ?? '').'</div>
+                <div>'.$esc($az->indirizzo ?? '').'</div>
+                <div>'.$esc($az->cap ?? '').' &ndash; '.$esc($az->comune ?? '').'</div>
+                <div>'.$esc($az->nazione ?? 'Italy').'</div>
+            </td>
+        </tr></table>';
+
+        // === Meta intervento ===
+        $html .= '<table class="meta-tbl" style="margin-top: 8pt;">';
+        $html .= '<tr><td class="meta-lbl">Wagon Number</td><td>'.$esc($intervento->vagone_codice ?? $intervento->automezzo ?? $dotes->automezzo ?? '').'</td><td class="meta-lbl">Detail Segment</td><td></td></tr>';
+        $html .= '<tr><td class="meta-lbl">Order number (if present)</td><td colspan="3">'.$esc($intervento->numero_ordine_cliente ?? '').'</td></tr>';
+        $html .= '<tr><td class="meta-lbl">Place of Service</td><td colspan="3">'.$esc(strtoupper($intervento->impianto ?? $intervento->localita ?? '')).'</td></tr>';
+        $html .= '<tr><td class="meta-lbl">Service performance date</td><td colspan="3">'.($intervento->data_apertura ? date('d/m/Y', strtotime($intervento->data_apertura)) : '').'</td></tr>';
+        $html .= '<tr><td class="meta-lbl">Reason for intake</td><td colspan="3">'.$esc($intervento->codice_cuu ?? '').'</td></tr>';
+        $html .= '</table>';
+
+        // === Tabella righe raggruppate per Service type ===
+        $html .= '<table class="righe">
+            <thead><tr>
+                <th width="4%">Pos.<br>Nr</th>
+                <th width="6%">Service<br>type</th>
+                <th width="10%">Number of<br>specification of<br>services or VTG<br>material number</th>
+                <th width="9%"></th>
+                <th width="33%">Description element 2 or material</th>
+                <th width="6%">Activity</th>
+                <th width="6%">Amount</th>
+                <th width="13%">Unit price of<br>number of<br>specification of<br>services or<br>material in EUR</th>
+                <th width="13%">Total (=<br>quantity x unit<br>price)</th>
+            </tr></thead>
+            <tbody>';
+
+        // Raggruppa righe per servizio
+        $byService = [];
+        foreach ($dorig as $r) {
+            $key = $r->servizio ?: '—';
+            if (!isset($byService[$key])) $byService[$key] = [];
+            $byService[$key][] = $r;
+        }
+
+        $posGlobal = 0;
+        foreach ($byService as $service => $righeGruppo) {
+            $subTot = 0;
+            foreach ($righeGruppo as $r) {
+                $posGlobal++;
+                $setupTag = !empty($r->setup_tank) ? 'Setup Task' : '';
+                $subTot += (float) $r->prezzo_totale;
+                $html .= '<tr>
+                    <td class="c">'.$posGlobal.'</td>
+                    <td class="c">'.$esc($r->servizio).'</td>
+                    <td class="c">'.$esc($r->cd_ar).'</td>
+                    <td class="c">'.$setupTag.'</td>
+                    <td>'.$esc($r->descrizione).'</td>
+                    <td class="r">'.$num($r->attivita ?? 1, 2).'</td>
+                    <td class="r">'.$num($r->qta, 2).'</td>
+                    <td class="r">'.$num($r->prezzo_unitario, 2).'</td>
+                    <td class="r">'.$eur($r->prezzo_totale).'</td>
+                </tr>';
+            }
+            $html .= '<tr class="sub"><td colspan="8" class="c">Totale Servizio '.$esc($service).'</td><td class="r">'.$eur($subTot).'</td></tr>';
+        }
+
+        // Totale finale
+        $html .= '<tr class="tot"><td colspan="8" class="r">Totale</td><td class="r">'.$eur($dotes->totale).'</td></tr>';
+        $html .= '</tbody></table>';
+
+        // === Footer firma ===
+        $html .= '<br><table class="footer-firma" style="margin-top: 30pt;"><tr>
+            <td width="50%">'.$esc($az->ragione_sociale ?? '').'<br><span style="font-weight:normal;">Workshop</span></td>
+            <td width="50%" style="text-align:right;">'.date('d/m/Y').'<br><span style="font-weight:normal;">Date &nbsp;&nbsp;&nbsp;&nbsp; Signature</span></td>
+        </tr></table>';
+
+        $mpdf->WriteHTML($html);
+
+        $tmpFile = sys_get_temp_dir().'/'.$tipo.'_'.$dotes->numero_doc.'_'.uniqid().'.pdf';
+        $mpdf->Output($tmpFile, 'F');
+        return $tmpFile;
     }
 
     private function _intervento_avanza_step(int $id, int $id_azienda, int $id_utente, int $stepCorrente, string $azione = 'completato', ?string $note = null, ?int $forzaStep = null): void
@@ -12530,12 +12676,29 @@ ORDER BY s.data_scadenza ASC',
             $mail->Body = $bodyHtml;
             $mail->AltBody = strip_tags($messaggio."\n\n".$linkFirma."\n\n".$firma);
 
-            // Allega PDF (mPDF) con layout professionale
+            // Allega PDF Invoice Receipt VTG (formato cliente)
             try {
-                $tmpFile = sys_get_temp_dir().'/preventivo_'.$i->id_dotes_preventivo.'.pdf';
                 $dotes = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->first();
                 $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
                 $az = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+                // Carica intervento completo per il PDF
+                $iFull = DB::table('interventi as i')
+                    ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+                    ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+                    ->where('i.id', $id)
+                    ->select('i.*', 'v.codice as vagone_codice', 'op.nome as op_nome')
+                    ->first();
+                if ($dotes && $iFull) {
+                    $tmpFile = $this->_genera_pdf_invoice_receipt($iFull, $dotes, $dorig, $az, 'preventivo');
+                    $mail->addAttachment($tmpFile, 'preventivo_'.$dotes->numero_doc.'.pdf');
+                }
+            } catch (\Exception $e) {
+                // Se la generazione fallisce l'email parte comunque col solo link
+                \Log::warning('PDF preventivo allegato fallito: '.$e->getMessage());
+            }
+            // Vecchio template generico rimosso, sostituito da _genera_pdf_invoice_receipt sopra
+            if (false) {
+                $az = null; $dotes = null; $dorig = []; $tmpFile = '';
 
                 if ($dotes) {
                     $mpdf = new \Mpdf\Mpdf([
@@ -12667,9 +12830,7 @@ ORDER BY s.data_scadenza ASC',
                     $mpdf->Output($tmpFile, 'F');
                     $mail->addAttachment($tmpFile, 'preventivo_'.$dotes->numero_doc.'.pdf');
                 }
-            } catch (\Exception $e) {
-                // Se la generazione del PDF fallisce, l'email parte ugualmente con il solo link
-            }
+            } // chiude if(false) dead-code legacy
 
             // Debug verbose: cattura output SMTP completo
             $smtpDebugOutput = '';
@@ -13079,7 +13240,49 @@ ORDER BY s.data_scadenza ASC',
         return Redirect::to('utente/modifica_documento/'.$id_ftv)->with('success', 'Fattura creata. Modifica le righe se serve, poi torna all\'intervento per generare PDF/XML.');
     }
 
+    public function interventi_preventivo_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select('i.*', 'v.codice as vagone_codice', 'op.nome as op_nome')
+            ->first();
+        if (!$i || !$i->id_dotes_preventivo) abort(404, 'Preventivo non trovato');
+
+        $dotes = DB::table('dotes')->where('id', $i->id_dotes_preventivo)->first();
+        $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_preventivo)->orderBy('n_riga')->get();
+        $az    = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        $path = $this->_genera_pdf_invoice_receipt($i, $dotes, $dorig, $az, 'preventivo');
+        return response()->download($path, 'preventivo_'.$dotes->numero_doc.'.pdf')->deleteFileAfterSend(true);
+    }
+
     public function interventi_fattura_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $i = DB::table('interventi as i')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select('i.*', 'v.codice as vagone_codice', 'op.nome as op_nome')
+            ->first();
+        if (!$i || !$i->id_dotes_fattura) abort(404, 'Fattura non trovata');
+
+        $dotes = DB::table('dotes')->where('id', $i->id_dotes_fattura)->first();
+        $dorig = DB::table('dorig')->where('id_dotes', $i->id_dotes_fattura)->orderBy('n_riga')->get();
+        $az    = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        $path = $this->_genera_pdf_invoice_receipt($i, $dotes, $dorig, $az, 'fattura');
+        return response()->download($path, 'fattura_'.$dotes->numero_doc.'.pdf')->deleteFileAfterSend(true);
+    }
+
+    public function interventi_fattura_pdf_OLD_GENERIC($id, Request $request)
     {
         $this->is_loggato();
         $utente = session('utente');

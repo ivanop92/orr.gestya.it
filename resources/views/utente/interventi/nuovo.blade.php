@@ -71,10 +71,38 @@
                                     <input type="text" name="automezzo" class="form-control" placeholder="numero carro o identificativo">
                                 </div>
 
-                                <div class="col-md-6">
-                                    <label class="form-label">Località intervento</label>
-                                    <input type="text" name="localita" class="form-control" placeholder="es. Marcianise">
+                                <div class="col-md-4">
+                                    <label class="form-label">Impianto</label>
+                                    <input type="text" name="impianto" class="form-control" placeholder="es. NOLA, BARI, SAN VITALIANO" list="impianti_list">
+                                    <datalist id="impianti_list">
+                                        <option value="NOLA">
+                                        <option value="BARI">
+                                        <option value="SAN VITALIANO">
+                                        <option value="MARCIANISE">
+                                    </datalist>
                                 </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Località intervento</label>
+                                    <input type="text" name="localita" class="form-control" placeholder="città/indirizzo">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">PdM Riferimento</label>
+                                    <input type="text" name="pdm_riferimento" class="form-control" value="VPI" placeholder="es. VPI">
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label">Codice avaria CUU</label>
+                                    <input type="text" name="codice_cuu" class="form-control" placeholder="es. 1.3.1.2">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">N. Ordine Cliente</label>
+                                    <input type="text" name="numero_ordine_cliente" class="form-control" placeholder="es. 1861750">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">N. OdL ORR</label>
+                                    <input type="text" name="odl_numero" class="form-control" placeholder="progressivo">
+                                </div>
+
                                 <div class="col-md-12">
                                     <label class="form-label">Motivo del rientro (sintomo)</label>
                                     <input type="text" name="reason_intake" class="form-control" placeholder="es. Avaria sale, perdita olio, rumore freno...">

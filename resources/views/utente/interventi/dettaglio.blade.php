@@ -202,8 +202,8 @@
                                             <h6 class="mb-2"><i class="ri-file-text-line me-1 text-success"></i>Preventivo</h6>
                                             @if($intervento->id_dotes_preventivo)
                                                 <p class="mb-2 small text-success"><i class="ri-check-line"></i> Già emesso</p>
-                                                <a href="/utente/dettaglio_documento/{{ $intervento->id_dotes_preventivo }}" class="btn btn-sm btn-soft-primary">Apri</a>
-                                                <a href="/utente/modifica_documento/{{ $intervento->id_dotes_preventivo }}" class="btn btn-sm btn-soft-warning"><i class="ri-pencil-line"></i> Modifica</a>
+                                                <a href="/utente/interventi/{{ $intervento->id }}/preventivo/pdf" class="btn btn-sm btn-soft-primary" target="_blank"><i class="ri-file-pdf-line"></i> Scarica PDF</a>
+                                                <a href="/utente/modifica_documento/{{ $intervento->id_dotes_preventivo }}" class="btn btn-sm btn-soft-warning"><i class="ri-pencil-line"></i> Modifica righe</a>
                                             @else
                                                 <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_preventivo">
                                                     @csrf
