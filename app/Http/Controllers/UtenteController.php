@@ -4731,7 +4731,7 @@ ORDER BY s.data_scadenza ASC',
                 $magazzinoController->generaMovimentiMancanti($id);
             }
 
-            return Redirect::to('/utente/modifica_documento/' . $id);
+            return Redirect::to('/utente/modifica_documento/' . $id)->with('success', 'Documento salvato correttamente');
         }
 
         // Recupera l'ordine da modificare, filtrando per azienda

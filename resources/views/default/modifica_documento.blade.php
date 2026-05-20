@@ -16,11 +16,24 @@
             </div>
         </div>
         <!-- end page title -->
-        <form enctype="multipart/form-data" method="post">
+        @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="ri-check-line align-middle me-1"></i> {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        @if(session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="ri-error-warning-line align-middle me-1"></i> {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        <form enctype="multipart/form-data" method="post" id="form_modifica_documento">
+            @csrf
             <div class="row justify-content-center">
                 <div class="col-xxl-9">
                     <div class="card">
-                        <form class="needs-validation" novalidate id="invoice_form">
+                        <div class="needs-validation" novalidate id="invoice_form">
                             <div class="card-body border-bottom border-bottom-dashed p-4">
                                 <div class="row">
 
@@ -474,12 +487,12 @@
                                     <textarea class="form-control alert alert-info" id="exampleFormControlTextarea1" placeholder="Notes" rows="2" required>All accounts are to be paid within 7 days from receipt of invoice. To be paid by cheque or credit card or direct payment online. If account is not paid within 7 days the credits details supplied as confirmation of work undertaken will be charged the agreed quoted fee noted above.</textarea>
                                 </div>
                                 <div class="hstack gap-2 justify-content-end d-print-none mt-4">
-                                    <input type="submit" name="modifica_dotes" class="btn btn-success" value="Modifica">
+                                    <button type="submit" name="modifica_dotes" value="1" class="btn btn-success"><i class="ri-save-line me-1"></i> Salva</button>
                                    {{-- <a href="javascript:void(0);" class="btn btn-primary"><i class="ri-download-2-line align-bottom me-1"></i> Download Invoice</a>
                                     <a href="javascript:void(0);" class="btn btn-danger"><i class="ri-send-plane-fill align-bottom me-1"></i> Send Invoice</a>--}}
                                 </div>
                             </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
                 <!--end col-->
