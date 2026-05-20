@@ -12595,6 +12595,100 @@ ORDER BY s.data_scadenza ASC',
         return Redirect::to('utente/dettaglio_documento/'.$id_dotes)->with('success', 'Preventivo creato'.($nRiga > 0 ? ' con '.$nRiga.' righe pre-popolate dal report manutentore' : ', aggiungi le righe lavorazione').'.');
     }
 
+    public function interventi_invia_release_email($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $utente->id_azienda)
+            ->select('i.*', 'c.ragione_sociale as cliente_ragione_sociale', 'c.email as cliente_email')
+            ->first();
+        if (!$i) return redirect()->back()->with('error', 'Intervento non trovato');
+
+        $destinatari = trim((string) $request->input('destinatari', ''));
+        $cc          = trim((string) $request->input('cc', ''));
+        $oggetto     = trim((string) $request->input('oggetto', '')) ?: ('Release to Service - Vagone '.($i->automezzo ?: $id));
+        $messaggio   = trim((string) $request->input('messaggio', ''));
+        $firma       = trim((string) $request->input('firma', ''));
+        $salvaFirma  = $request->input('salva_firma', 0);
+
+        if ($destinatari === '') return redirect()->back()->with('error', 'Inserisci almeno un destinatario');
+
+        if ($salvaFirma && $firma !== '') {
+            DB::table('utenti')->where('id', $utente->id)->update(['firma_email' => $firma]);
+        }
+
+        $az = DB::table('aziende')->where('id', $utente->id_azienda)->first();
+
+        try {
+            $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = 'smtps.aruba.it';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'noreply@gestya.it';
+            $mail->Password = 'jwZFTChzg8gp41?c';
+            $mail->SMTPSecure = 'ssl';
+            $mail->CharSet = 'utf-8';
+            $mail->Port = 465;
+            $mail->setFrom('noreply@gestya.it', $az->ragione_sociale ?? 'Gestya');
+            if (!empty($utente->email)) $mail->addReplyTo($utente->email);
+
+            foreach (preg_split('/[,;]+/', $destinatari) as $em) {
+                $em = trim($em);
+                if ($em && filter_var($em, FILTER_VALIDATE_EMAIL)) $mail->addAddress($em);
+            }
+            if ($cc !== '') {
+                foreach (preg_split('/[,;]+/', $cc) as $em) {
+                    $em = trim($em);
+                    if ($em && filter_var($em, FILTER_VALIDATE_EMAIL)) $mail->addCC($em);
+                }
+            }
+
+            $bodyHtml = '<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">' .
+                nl2br(htmlspecialchars($messaggio, ENT_QUOTES, 'UTF-8')) .
+                '<p style="font-size:12px;color:#666;margin-top:18px;">In allegato il documento <strong>Release to Service</strong> conforme VPI-EMG 01 Annex 15-1.</p>' .
+                (!empty($firma) ? '<hr style="margin: 24px 0; border:0; border-top: 1px solid #e5e7eb;"><div style="color:#555;">'.nl2br(htmlspecialchars($firma, ENT_QUOTES, 'UTF-8')).'</div>' : '') .
+                '</div>';
+
+            $mail->isHTML(true);
+            $mail->Subject = $oggetto;
+            $mail->Body = $bodyHtml;
+            $mail->AltBody = strip_tags($messaggio."\n\n".$firma);
+
+            // Allega PDF Release to Service
+            try {
+                $tmpPath = $this->_genera_release_pdf_to_file((int) $id, (int) $utente->id_azienda);
+                if ($tmpPath && file_exists($tmpPath)) {
+                    $mail->addAttachment($tmpPath, 'release_to_service_'.($i->automezzo ?: $id).'.pdf');
+                }
+            } catch (\Exception $e) {
+                \Log::warning('PDF Release allegato fallito: '.$e->getMessage());
+            }
+
+            $sent = $mail->send();
+            if (!$sent) return redirect()->back()->with('error', 'SMTP non ha consegnato la mail. ErrorInfo: '.$mail->ErrorInfo);
+
+            DB::table('interventi')->where('id', $id)->update(['release_inviato_il' => date('Y-m-d H:i:s')]);
+            DB::table('interventi_log')->insert([
+                'id_intervento' => $id,
+                'id_azienda'    => $utente->id_azienda,
+                'id_utente'     => $utente->id,
+                'step'          => $i->step_corrente,
+                'azione'        => 'release_inviato',
+                'note'          => 'Release to Service inviato a: '.$destinatari.($cc ? ' (CC: '.$cc.')' : ''),
+                'created_at'    => date('Y-m-d H:i:s'),
+            ]);
+
+            return Redirect::to('utente/interventi/'.$id)->with('success', 'Release to Service inviato via email a: '.$destinatari);
+        } catch (\Exception $e) {
+            \Log::error('Errore invio Release intervento #'.$id, ['msg' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Errore invio email: '.$e->getMessage());
+        }
+    }
+
     public function interventi_invia_preventivo_email($id, Request $request)
     {
         $this->is_loggato();
@@ -12662,12 +12756,19 @@ ORDER BY s.data_scadenza ASC',
                 $firmaToken = Str::random(48);
                 DB::table('dotes')->where('id', $i->id_dotes_preventivo)->update(['firma_token' => $firmaToken]);
             }
-            $linkFirma = url('/firma/'.$firmaToken);
+            // Flag firma richiesta dal toggle del form (default true)
+            $firmaRichiesta = $request->input('firma_richiesta', '1') === '1';
+            $linkFirma = url('/firma/'.$firmaToken).($firmaRichiesta ? '' : '?view=1');
+
+            $ctaLabel = $firmaRichiesta ? 'Apri e Firma il Preventivo' : 'Apri il Preventivo';
+            $ctaSub   = $firmaRichiesta
+                ? 'Cliccando il pulsante potrai visualizzare il preventivo e firmarlo digitalmente via SMS OTP.'
+                : 'Cliccando il pulsante potrai visualizzare il preventivo in dettaglio.';
 
             $bodyHtml = '<div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">' .
                 nl2br(htmlspecialchars($messaggio, ENT_QUOTES, 'UTF-8')) .
-                '<p style="margin-top: 18px;"><a href="'.htmlspecialchars($linkFirma, ENT_QUOTES, 'UTF-8').'" style="display:inline-block;padding:12px 22px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Apri e Firma il Preventivo</a></p>' .
-                '<p style="font-size:12px;color:#666;">Cliccando il pulsante potrai visualizzare il preventivo e firmarlo digitalmente via SMS OTP.</p>' .
+                '<p style="margin-top: 18px;"><a href="'.htmlspecialchars($linkFirma, ENT_QUOTES, 'UTF-8').'" style="display:inline-block;padding:12px 22px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">'.$ctaLabel.'</a></p>' .
+                '<p style="font-size:12px;color:#666;">'.$ctaSub.'</p>' .
                 (!empty($firma) ? '<hr style="margin: 24px 0; border:0; border-top: 1px solid #e5e7eb;"><div style="color:#555;">'.nl2br(htmlspecialchars($firma, ENT_QUOTES, 'UTF-8')).'</div>' : '') .
                 '</div>';
 
@@ -12859,11 +12960,21 @@ ORDER BY s.data_scadenza ASC',
                 'id_utente'     => $utente->id,
                 'step'          => 5,
                 'azione'        => 'preventivo_inviato',
-                'note'          => 'Email inviata a: '.$destinatari.($cc ? ' (CC: '.$cc.')' : ''),
+                'note'          => 'Email inviata a: '.$destinatari.($cc ? ' (CC: '.$cc.')' : '').($firmaRichiesta ? ' [firma OTP richiesta]' : ' [sola visualizzazione]'),
                 'created_at'    => date('Y-m-d H:i:s'),
             ]);
 
-            return Redirect::to('utente/interventi/'.$id)->with('success', 'Preventivo inviato via email a: '.$destinatari);
+            DB::table('dotes_invii_email')->insert([
+                'id_dotes'             => $i->id_dotes_preventivo,
+                'id_azienda'           => $utente->id_azienda,
+                'tipo'                 => 'preventivo',
+                'destinatari'          => substr($destinatari, 0, 1000),
+                'cc'                   => $cc ? substr($cc, 0, 1000) : null,
+                'firma_richiesta'      => $firmaRichiesta ? 1 : 0,
+                'inviato_da_id_utente' => $utente->id,
+            ]);
+
+            return Redirect::to('utente/interventi/'.$id)->with('success', 'Preventivo inviato via email a: '.$destinatari.($firmaRichiesta ? '' : ' (senza richiesta di firma)'));
         } catch (\Exception $e) {
             \Log::error('Errore invio preventivo intervento #'.$id, [
                 'msg'   => $e->getMessage(),
@@ -12975,10 +13086,154 @@ ORDER BY s.data_scadenza ASC',
     }
 
     /**
-     * Release to service - layout VPI-EMG 01 Annex 15-1
-     * Documento ufficiale di reimmissione in servizio del rotabile ferroviario.
+     * Genera PDF Release to Service e lo salva su file temporaneo. Ritorna il path.
+     */
+    private function _genera_release_pdf_to_file(int $id, int $id_azienda): ?string
+    {
+        $i = DB::table('interventi as i')
+            ->leftJoin('clienti as c', 'c.id', '=', 'i.id_cliente')
+            ->leftJoin('vagoni as v', 'v.id', '=', 'i.id_vagone')
+            ->leftJoin('utenti as op', 'op.id', '=', 'i.id_operatore_assegnato')
+            ->leftJoin('utenti as rm', 'rm.id', '=', 'i.id_responsabile_manutenzione')
+            ->where('i.id', $id)
+            ->where('i.id_azienda', $id_azienda)
+            ->select(
+                'i.*',
+                'c.ragione_sociale as cliente_rs',
+                'v.codice as vagone_codice', 'v.tipo as vagone_tipo', 'v.numero_uic as vagone_uic',
+                'v.peso_a_vuoto_kg', 'v.portata_massima_kg', 'v.lunghezza_metri',
+                'v.data_immatricolazione', 'v.data_ultima_revisione_generale',
+                'op.nome as op_nome', 'op.cognome as op_cognome',
+                'rm.nome as rm_nome', 'rm.cognome as rm_cognome'
+            )
+            ->first();
+        if (!$i) return null;
+
+        $az  = DB::table('aziende')->where('id', $id_azienda)->first();
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+        $dt  = function ($v) { return $v ? date('d-m-Y', strtotime($v)) : ''; };
+        $rmLabel = $i->rm_nome ? trim($i->rm_nome.' '.$i->rm_cognome) : '';
+        $tare = $i->peso_a_vuoto_kg ? number_format($i->peso_a_vuoto_kg, 0, '', '').' kg' : '';
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4',
+            'margin_left' => 10, 'margin_right' => 10,
+            'margin_top' => 10, 'margin_bottom' => 12,
+            'default_font' => 'helvetica', 'default_font_size' => 8,
+        ]);
+
+        $html = '<style>
+            body { font-family: helvetica, sans-serif; color: #000; font-size: 8pt; }
+            h1 { font-size: 14pt; font-weight: bold; margin: 0 0 6pt; }
+            table { border-collapse: collapse; width: 100%; }
+            .box td { border: 1px solid #000; padding: 3pt 5pt; vertical-align: top; font-size: 8pt; }
+            .lbl { background: #e0e0e0; font-weight: bold; font-size: 7pt; }
+            .azhdr { text-align: right; font-size: 8pt; }
+            .azhdr strong { font-size: 10pt; }
+            .small { font-size: 7pt; }
+        </style>';
+        $html .= '<table><tr>
+            <td width="60%"><h1>Release to service</h1></td>
+            <td width="40%" class="azhdr">
+                <strong>'.$esc($az->ragione_sociale ?? '').'</strong><br>
+                <span class="small">'.$esc($az->indirizzo ?? '').'</span><br>
+                <span class="small">'.$esc($az->cap ?? '').' '.$esc($az->comune ?? '').' ('.$esc($az->provincia ?? '').')</span><br>
+                <span class="small">P.IVA: '.$esc($az->partita_iva ?? '').'</span>
+            </td>
+        </tr></table>';
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="28%" class="lbl">Wagon number:</td>
+            <td width="28%" class="lbl">Order number:</td>
+            <td width="22%" class="lbl">Workshop short code:</td>
+            <td width="22%" rowspan="2"></td>
+        </tr><tr>
+            <td>'.$esc($i->vagone_codice ?: $i->automezzo).'</td>
+            <td>'.$esc($i->odl_numero ?: '').'/'.($i->data_apertura ? date('Y', strtotime($i->data_apertura)) : date('Y')).'</td>
+            <td>'.$esc($az->ragione_sociale ?? '').'</td>
+        </tr></table>';
+        $html .= '<table class="box"><tr>
+            <td width="28%" class="lbl">Keeper/ECM:</td>
+            <td width="28%" class="lbl">Customer order number:</td>
+            <td width="44%" class="lbl">Created on:</td>
+        </tr><tr>
+            <td>'.$esc($i->cliente_rs ?: '').'</td>
+            <td>'.$esc($i->numero_ordine_cliente ?: '').'</td>
+            <td>'.$dt($i->data_apertura).'</td>
+        </tr></table>';
+        $html .= '<table class="box" style="margin-top:4pt;"><tr>
+            <td width="28%" class="lbl">Arrival date:</td>
+            <td width="28%" class="lbl">Departure date:</td>
+            <td width="44%" class="lbl">Maintenance level performed:</td>
+        </tr><tr>
+            <td>'.$dt($i->data_apertura).'</td>
+            <td>'.date('d-m-Y').'</td>
+            <td>'.$esc($i->codice_cuu ?: '').'</td>
+        </tr></table>';
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="20%" class="lbl">Wagon number old:</td>
+            <td width="20%" class="lbl">Tare weight:</td>
+            <td width="12%" class="lbl">Type:</td>
+            <td width="12%" class="lbl">Cycle:</td>
+            <td width="12%" class="lbl">Date:</td>
+            <td width="12%" class="lbl">Extension:</td>
+        </tr><tr>
+            <td>'.$esc($i->matricola_carro_old ?: '-').'</td>
+            <td>'.$esc($tare).'</td>
+            <td>'.$esc($i->vagone_tipo ?: '').'</td>
+            <td class="small">6Irev/ari-dts</td>
+            <td>'.$dt($i->data_ultima_revisione_generale ?? null).'</td>
+            <td></td>
+        </tr></table>';
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td width="50%"><span class="lbl">Bogie type:</span> '.$esc($i->vagone_tipo ?: '').'</td>
+            <td width="50%"><span class="lbl">Brake type:</span> KE-GP-A</td>
+        </tr></table>';
+        $otherInfo = '';
+        if (!empty($i->report_danni)) $otherInfo .= $esc($i->report_danni)."\n\n";
+        if (!empty($i->note))         $otherInfo .= $esc($i->note);
+        $html .= '<table class="box" style="margin-top:6pt;"><tr>
+            <td class="lbl">Other information (in accordance with the specification of the ECM):</td>
+        </tr><tr>
+            <td style="height: 80pt; white-space: pre-wrap;">'.$otherInfo.'</td>
+        </tr></table>';
+        $html .= '<div class="small" style="margin-top:8pt; text-align:justify;">';
+        $html .= 'The above entries correspond to the condition of the wagon and the inscriptions found on the wagon. All work was performed properly. The wagon is safe for service. We hereby certify that this wagon is leaving our workshop according to the applicable laws and ordinances, the regulations of the keeper and the RID (if applicable).';
+        $html .= '</div>';
+        $html .= '<table class="box" style="margin-top:10pt;"><tr>
+            <td width="30%" class="lbl">Email:</td>
+            <td width="20%" class="lbl">Telephone no.:</td>
+            <td width="15%" class="lbl">Fax no.:</td>
+            <td width="35%" class="lbl">Name (of the responsible employee):</td>
+        </tr><tr>
+            <td>'.$esc($az->email_ricezione_fatture ?? '').'</td>
+            <td>Tel.: 081 5127059</td>
+            <td>-</td>
+            <td>ECM '.$esc($az->ragione_sociale ?? '').': '.$esc($rmLabel ?: '').'</td>
+        </tr></table>';
+        $html .= '<div class="small" style="margin-top:14pt; color:#666;">VPI-EMG 01 Annex 15-1 | Version: 01/12/2024<br>Translation: 10/12/2024</div>';
+
+        $mpdf->WriteHTML($html);
+        $tmpFile = sys_get_temp_dir().'/release_'.$id.'_'.uniqid().'.pdf';
+        $mpdf->Output($tmpFile, 'F');
+        return $tmpFile;
+    }
+
+    /**
+     * Release to service - endpoint download.
      */
     public function interventi_release_to_service_pdf($id, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $path = $this->_genera_release_pdf_to_file((int) $id, (int) $utente->id_azienda);
+        if (!$path) abort(404, 'Intervento non trovato');
+        return response()->download($path, 'release_to_service_'.$id.'.pdf')->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Versione vecchia in-line (riferimento, non chiamata).
+     */
+    public function interventi_release_to_service_pdf_OLD($id, Request $request)
     {
         $this->is_loggato();
         $utente = session('utente');

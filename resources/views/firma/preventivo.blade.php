@@ -115,7 +115,11 @@
     </div>
 
     {{-- BLOCCO FIRMA --}}
-    @if(!empty($dotes->firmato_il))
+    @if(!empty($viewOnly) && empty($dotes->firmato_il))
+        <div class="doc-card" style="background:#f1f5f9; border:1px solid #cbd5e1;">
+            <small class="text-muted"><i class="ri-information-line me-1"></i>Documento in sola lettura. Se hai bisogno di firmarlo digitalmente, contatta l'ufficio per l'invio del link con firma.</small>
+        </div>
+    @elseif(!empty($dotes->firmato_il))
         <div class="doc-card firma-box firma-ok">
             <h5 class="mb-2"><i class="ri-check-double-line text-success me-1"></i>Preventivo firmato</h5>
             <div><strong>{{ $dotes->firmato_da_nome }}</strong> ha firmato questo preventivo il <strong>{{ \Carbon\Carbon::parse($dotes->firmato_il)->format('d/m/Y H:i') }}</strong></div>

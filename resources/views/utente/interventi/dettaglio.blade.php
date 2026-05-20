@@ -222,11 +222,14 @@
                                             @if($intervento->id_dotes_certificato)
                                                 <p class="mb-2 small text-success"><i class="ri-check-line"></i> Già emesso</p>
                                                 <a href="/utente/interventi/{{ $intervento->id }}/release_to_service/pdf" class="btn btn-sm btn-soft-primary" target="_blank">
-                                                    <i class="ri-file-pdf-line"></i> Release to Service (VPI)
+                                                    <i class="ri-file-pdf-line"></i> PDF
                                                 </a>
-                                                <a href="/utente/interventi/{{ $intervento->id }}/certificato/pdf" class="btn btn-sm btn-soft-secondary" target="_blank" title="Certificato generico (vecchio formato)">
-                                                    Cert. generico
-                                                </a>
+                                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal_invia_release">
+                                                    <i class="ri-mail-send-line"></i> Invia via email
+                                                </button>
+                                                @if($intervento->release_inviato_il)
+                                                    <small class="text-success d-block mt-1"><i class="ri-check-line"></i> Inviato il {{ \Carbon\Carbon::parse($intervento->release_inviato_il)->format('d/m/Y H:i') }}</small>
+                                                @endif
                                             @else
                                                 <form method="post" action="/utente/interventi/{{ $intervento->id }}/step4_emetti_certificato">
                                                     @csrf
@@ -612,11 +615,71 @@
                             <label class="form-check-label small" for="salva_firma">Salva questa firma sul mio profilo per la prossima volta</label>
                         </div>
                     </div>
+
+                    <div class="alert alert-light border mb-0">
+                        <div class="form-check form-switch form-switch-md">
+                            <input class="form-check-input" type="checkbox" name="firma_richiesta" id="firma_richiesta" value="1">
+                            <label class="form-check-label" for="firma_richiesta">
+                                <strong><i class="ri-pen-nib-line me-1"></i>Richiedi firma digitale al cliente (SMS OTP)</strong>
+                            </label>
+                        </div>
+                        <small class="text-muted">Se attivo, il cliente apre il link e firma il preventivo digitalmente via codice SMS. Se disattivo, il link mostra solo il preventivo in sola lettura (consigliato per il primo invio).</small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
                     <button type="submit" class="btn btn-primary">
                         <i class="ri-send-plane-line me-1"></i> Invia Email
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modal_invia_release" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form method="post" action="/utente/interventi/{{ $intervento->id }}/invia_release_email">
+            @csrf
+            <div class="modal-content border-0">
+                <div class="modal-header bg-soft-primary p-3">
+                    <h5 class="modal-title"><i class="ri-shield-check-line me-2"></i>Invia Release to Service via email</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Destinatari <b style="color:red">*</b></label>
+                        <input type="text" name="destinatari" class="form-control" value="{{ $intervento->cliente_email ?? '' }}" required placeholder="email separate da ; o ,">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">CC (opzionale)</label>
+                        <input type="text" name="cc" class="form-control" placeholder="copia@dominio.it">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Oggetto</label>
+                        <input type="text" name="oggetto" class="form-control" value="Release to Service - Vagone {{ $intervento->vagone_codice ?: $intervento->automezzo }} - Intervento #{{ $intervento->id }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Messaggio</label>
+                        @php
+                            $vagLabel = $intervento->vagone_codice ?: $intervento->automezzo;
+                            $msgRel = "Buongiorno,\n\nin allegato il documento di Release to Service relativo all'intervento di manutenzione" . ($vagLabel ? " sul vagone $vagLabel" : "") . ".\n\nIl documento certifica la conformità della reimmissione in servizio secondo VPI-EMG 01 Annex 15-1.\n\nCordiali saluti";
+                        @endphp
+                        <textarea name="messaggio" class="form-control" rows="5">{{ $msgRel }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Firma <small class="text-muted">(in fondo all'email)</small></label>
+                        <textarea name="firma" class="form-control" rows="3">{{ $firma_utente ?? ($utente->nome.' '.$utente->cognome) }}</textarea>
+                        <div class="form-check form-check-sm mt-1">
+                            <input class="form-check-input" type="checkbox" name="salva_firma" value="1" id="salva_firma_rel">
+                            <label class="form-check-label small" for="salva_firma_rel">Salva firma sul profilo</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="ri-send-plane-line me-1"></i> Invia
                     </button>
                 </div>
             </div>

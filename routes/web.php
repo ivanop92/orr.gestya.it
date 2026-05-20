@@ -57,6 +57,7 @@ Route::get('utente/interventi/{id}/mobile_repair_report/pdf',array('uses'=>'Uten
 Route::get('utente/interventi/{id}/modulo_odl/pdf',array('uses'=>'UtenteController@interventi_modulo_odl_pdf'));
 Route::post('utente/interventi/{id}/step5_decisione',array('uses'=>'UtenteController@interventi_step_5_decisione'));
 Route::post('utente/interventi/{id}/invia_preventivo_email',array('uses'=>'UtenteController@interventi_invia_preventivo_email'));
+Route::post('utente/interventi/{id}/invia_release_email',array('uses'=>'UtenteController@interventi_invia_release_email'));
 
 // Pagina pubblica firma cliente (no login) — link via mail
 Route::get('firma/{token}',array('uses'=>'FirmaController@preventivo'));

@@ -12,7 +12,7 @@ class FirmaController extends Controller
     /**
      * Pagina pubblica del preventivo per il cliente (token URL).
      */
-    public function preventivo($token)
+    public function preventivo($token, \Illuminate\Http\Request $request)
     {
         $dotes = DB::table('dotes')->where('firma_token', $token)->first();
         if (!$dotes) abort(404, 'Preventivo non trovato');
@@ -24,7 +24,10 @@ class FirmaController extends Controller
 
         $azienda = DB::table('aziende')->where('id', $dotes->id_azienda)->first();
 
-        return view('firma.preventivo', compact('dotes', 'righe', 'azienda'));
+        // Modalita' sola lettura se ?view=1 (toggle firma OFF nell'invio email)
+        $viewOnly = $request->input('view') === '1';
+
+        return view('firma.preventivo', compact('dotes', 'righe', 'azienda', 'viewOnly'));
     }
 
     /**
