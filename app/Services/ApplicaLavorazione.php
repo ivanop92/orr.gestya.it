@@ -105,6 +105,79 @@ class ApplicaLavorazione
         return [true, $righeAggiunte . ' righe aggiunte al documento', $righeAggiunte];
     }
 
+    /**
+     * Applica un set di SINGOLE righe lavorazione (per id_riga) al documento.
+     * Ritorna [bool $ok, string $msg, int $n_righe_aggiunte].
+     */
+    public static function applicaRigheA(int $id_dotes, int $id_azienda, array $id_righe, int $id_utente): array
+    {
+        $dotes = DB::table('dotes')->where('id', $id_dotes)->where('id_azienda', $id_azienda)->first();
+        if (!$dotes) return [false, 'Documento non trovato', 0];
+
+        $maxNRiga = (int) DB::table('dorig')
+            ->where('id_dotes', $id_dotes)
+            ->where('id_azienda', $id_azienda)
+            ->max('n_riga');
+        $aggiunte = 0;
+
+        $righe = DB::table('lavorazioni_righe')
+            ->whereIn('id', array_map('intval', $id_righe))
+            ->where('id_azienda', $id_azienda)
+            ->orderBy('ordinamento')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($righe as $r) {
+            $maxNRiga++;
+            $imp = (float) $r->imponibile;
+            $tax = (float) $r->imposta;
+            $tot = $imp + $tax;
+            $isOrario = ((float) $r->minuti) > 0;
+            $attivita = $r->attivita > 0 ? (float) $r->attivita : 1;
+            $qtaEff = $isOrario ? round(((float) $r->minuti) / 60, 3) : round(((float) $r->qta) * $attivita, 3);
+
+            DB::table('dorig')->insert([
+                'id_azienda'                  => $id_azienda,
+                'id_utente'                   => $id_utente,
+                'id_cliente'                  => $dotes->id_cliente ?? null,
+                'id_dotes'                    => $id_dotes,
+                'id_testata'                  => $id_dotes,
+                'cd_do'                       => $dotes->cd_do,
+                'tipo_documento'              => $dotes->tipo_documento ?? null,
+                'numero_doc'                  => $dotes->numero_doc ?? null,
+                'data_doc'                    => $dotes->data_doc ?? null,
+                'cd_ar'                       => $r->codice,
+                'n_riga'                      => $maxNRiga,
+                'descrizione'                 => $r->descrizione,
+                'qta'                         => $qtaEff,
+                'um'                          => $isOrario ? 'H' : 'PZ',
+                'pu'                          => (float) $r->pu,
+                'pt'                          => (float) $r->pt,
+                'prezzo_unitario'             => (float) $r->pu,
+                'prezzo_totale'               => (float) $r->pt,
+                'prezzo_totale_iva'           => $tot,
+                'iva'                         => (int) $r->aliquota,
+                'imponibile'                  => $imp,
+                'imposta'                     => $tax,
+                'totale'                      => $tot,
+                'servizio'                    => $r->servizio,
+                'setup_tank'                  => isset($r->setup_tank) ? (int) $r->setup_tank : 0,
+                'attivita'                    => $attivita,
+                'minuti'                      => (float) $r->minuti,
+                'materiale'                   => isset($r->materiale) ? (float) $r->materiale : 0,
+                'descrizione_materiale'       => $r->descrizione_materiale ?? null,
+                'id_lavorazione_origine'      => $r->id_lavorazione,
+                'id_lavorazione_riga_origine' => $r->id,
+            ]);
+            $aggiunte++;
+        }
+
+        self::ricalcolaAggregatiDotes($id_dotes, $id_azienda);
+
+        if ($aggiunte === 0) return [false, 'Nessuna riga aggiunta', 0];
+        return [true, $aggiunte.' righe singole aggiunte', $aggiunte];
+    }
+
     public static function ricalcolaAggregatiDotes(int $id_dotes, int $id_azienda): void
     {
         $agg = DB::table('dorig')

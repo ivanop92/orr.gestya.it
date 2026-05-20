@@ -11344,23 +11344,65 @@ ORDER BY s.data_scadenza ASC',
     {
         $this->is_loggato();
         $utente = session('utente');
-        $ids = $request->input('id_lavorazioni', []);
+        $idsMacro = $request->input('id_lavorazioni', []);
+        $idsRighe = $request->input('id_lavorazioni_righe', []);
 
-        if (!is_array($ids) || count($ids) === 0) {
-            return redirect()->back()->with('error', 'Nessuna lavorazione selezionata');
+        $nTot = 0;
+        $msgs = [];
+
+        if (is_array($idsMacro) && count($idsMacro) > 0) {
+            [$ok, $msg, $n] = \App\Services\ApplicaLavorazione::applicaA(
+                (int) $id_dotes, (int) $utente->id_azienda, $idsMacro, (int) $utente->id
+            );
+            $nTot += (int) $n;
+            $msgs[] = $msg;
         }
 
-        [$ok, $msg, $n] = \App\Services\ApplicaLavorazione::applicaA(
-            (int) $id_dotes,
-            (int) $utente->id_azienda,
-            $ids,
-            (int) $utente->id
-        );
-
-        if ($ok) {
-            return redirect()->back()->with('success', $msg);
+        if (is_array($idsRighe) && count($idsRighe) > 0) {
+            [$ok2, $msg2, $n2] = \App\Services\ApplicaLavorazione::applicaRigheA(
+                (int) $id_dotes, (int) $utente->id_azienda, $idsRighe, (int) $utente->id
+            );
+            $nTot += (int) $n2;
+            $msgs[] = $msg2;
         }
-        return redirect()->back()->with('error', $msg);
+
+        if ($nTot === 0) {
+            return redirect()->back()->with('error', 'Nessuna riga selezionata');
+        }
+        return redirect()->back()->with('success', implode(' · ', $msgs));
+    }
+
+    public function ajax_lavorazione_righe($id_lavorazione, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $righe = DB::table('lavorazioni_righe')
+            ->where('id_lavorazione', $id_lavorazione)
+            ->where('id_azienda', $utente->id_azienda)
+            ->orderBy('ordinamento')
+            ->orderBy('id')
+            ->get();
+        return response()->json(['righe' => $righe]);
+    }
+
+    public function dorig_duplica($id_riga, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $r = DB::table('dorig')->where('id', $id_riga)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$r) return redirect()->back()->with('error', 'Riga non trovata');
+
+        // Calcola nuovo n_riga = max esistente +1
+        $maxN = (int) DB::table('dorig')->where('id_dotes', $r->id_dotes)->where('id_azienda', $utente->id_azienda)->max('n_riga');
+        $nuova = (array) $r;
+        unset($nuova['id']);
+        $nuova['n_riga'] = $maxN + 1;
+        DB::table('dorig')->insert($nuova);
+
+        // Ricalcola totali testata
+        \App\Services\ApplicaLavorazione::ricalcolaAggregatiDotes((int) $r->id_dotes, (int) $utente->id_azienda);
+
+        return redirect()->back()->with('success', 'Riga duplicata');
     }
 
     public function lavorazioni(Request $request)

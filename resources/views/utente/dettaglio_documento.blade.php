@@ -113,6 +113,7 @@
                                     <th scope="col">Prezzo</th>
                                     <th scope="col">IVA</th>
                                     <th scope="col" style="width: 150px;">Importo</th>
+                                    <th scope="col" style="width: 60px;"></th>
                                 </tr>
                                 </thead>
                                 <tbody id="righe-doc-sortable">
@@ -143,6 +144,12 @@
                                         <td>€ {{number_format($riga->prezzo_unitario, 2, ',', '.')}}</td>
                                         <td>{{$riga->iva}}%</td>
                                         <td class="text-end">€ {{number_format($riga->prezzo_totale, 2, ',', '.')}}</td>
+                                        <td class="text-end">
+                                            <form method="post" action="/utente/dorig/{{ $riga->id }}/duplica" class="d-inline" onsubmit="return confirm('Duplicare questa riga?');">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-soft-secondary" title="Duplica riga"><i class="ri-file-copy-line"></i></button>
+                                            </form>
+                                        </td>
                                     </tr>
                                 @endforeach
                                 </tbody>
