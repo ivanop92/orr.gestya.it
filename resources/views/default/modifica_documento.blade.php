@@ -303,21 +303,21 @@
                                                 <textarea class="form-control bg-light border-0"  name="products[{{ $index }}][dettagli_prodotto]" id="productDetails-{{ $index + 1 }}" rows="2" placeholder="Product Details"> {{ $d->dettagli_prodotto }} </textarea>
                                             </td>
                                             <td>
-                                                <input type="number" class="form-control product-price bg-light border-0" value="{{ $d->prezzo_unitario }}" name="products[{{ $index }}][prezzo_unitario]" id="productRate-{{ $index + 1 }}" step="0.01" placeholder="0.00" required />
+                                                <input type="text" inputmode="decimal" class="form-control product-price bg-light border-0 num-decimal" value="{{ $d->prezzo_unitario }}" name="products[{{ $index }}][prezzo_unitario]" id="productRate-{{ $index + 1 }}" placeholder="0,00" required />
                                                 <div class="invalid-feedback">
                                                     Please enter a rate
                                                 </div>
                                             </td>
                                             <td>
-                                                <input type="number" style="width: 50px" class="form-control  bg-light border-0" value="{{ $d->iva }}" name="products[{{ $index }}][iva]" id="productIva-1" step="0.01" placeholder="0%" required />
+                                                <input type="text" inputmode="decimal" style="width: 50px" class="form-control bg-light border-0 num-decimal" value="{{ $d->iva }}" name="products[{{ $index }}][iva]" id="productIva-1" placeholder="0" required />
                                             </td>
                                             <td>
-                                                <input type="number" style="width: 60px" class="form-control   bg-light border-0" value="{{ $d->lotto }}" name="products[{{ $index }}][lotto]" id="productLotto-1"  placeholder="Lotto" required />
+                                                <input type="text" style="width: 60px" class="form-control bg-light border-0" value="{{ $d->lotto }}" name="products[{{ $index }}][lotto]" id="productLotto-1" placeholder="Lotto" />
                                             </td>
                                             <td>
                                                 <div class="input-step">
                                                     <button type="button" class="minus">–</button>
-                                                    <input type="number" class="form-control product-quantity" value="{{ $d->qta }}" name="products[{{ $index }}][qta]" id="product-qty-{{ $index + 1 }}"  readonly />
+                                                    <input type="text" inputmode="decimal" class="form-control product-quantity num-decimal" value="{{ $d->qta }}" name="products[{{ $index }}][qta]" id="product-qty-{{ $index + 1 }}" />
                                                     <button type="button" class="plus">+</button>
                                                 </div>
                                             </td>
@@ -531,6 +531,20 @@
 
     }
 
+    // Sostituisce la virgola con il punto in tutti i campi decimali prima del submit.
+    // Permette agli utenti italiani di scrivere "0,30" o "1,5" senza errori HTML5.
+    document.addEventListener('DOMContentLoaded', function(){
+        var f = document.getElementById('form_modifica_documento');
+        if (!f) return;
+        f.addEventListener('submit', function(){
+            f.querySelectorAll('.num-decimal').forEach(function(el){
+                if (typeof el.value === 'string') {
+                    el.value = el.value.replace(',', '.').trim();
+                }
+            });
+        });
+    });
+
 
     /*parte dell'aggiunta degli articoli*/
 
@@ -561,19 +575,19 @@
                 <textarea class="form-control bg-light border-0" name="products[${index}][dettagli_prodotto]" id="productDetails-${productCount}" rows="2" placeholder="Product Details"></textarea>
             </td>
             <td>
-                <input type="number" class="form-control product-price bg-light border-0" name="products[${index}][prezzo_unitario]" id="productRate-${productCount}" step="0.01" placeholder="0.00" required oninput="updatePrice(${productCount})" />
+                <input type="text" inputmode="decimal" class="form-control product-price bg-light border-0 num-decimal" name="products[${index}][prezzo_unitario]" id="productRate-${productCount}" placeholder="0,00" required oninput="updatePrice(${productCount})" />
                 <div class="invalid-feedback">Please enter a rate</div>
             </td>
  <td>
-                      <input type="number" style="width: 50px" class="form-control  bg-light border-0" name="products[${index}][iva]" id="productIva-${productCount}" step="0.01" placeholder="0%" required />
+                      <input type="text" inputmode="decimal" style="width: 50px" class="form-control bg-light border-0 num-decimal" name="products[${index}][iva]" id="productIva-${productCount}" placeholder="0" required />
                </td>
                 <td>
-                       <input type="number" style="width: 60px" class="form-control   bg-light border-0" name="products[${index}][lotto]" id="productLotto-${productCount}"  placeholder="Lotto" required />
+                       <input type="text" style="width: 60px" class="form-control bg-light border-0" name="products[${index}][lotto]" id="productLotto-${productCount}" placeholder="Lotto" />
                  </td>
             <td>
                 <div class="input-step">
                     <button type="button" class="minus" onclick="changeQuantity(${productCount}, -1)">–</button>
-                    <input type="number" class="product-quantity" name="products[${index}][qta]" id="product-qty-${productCount}" value="0" readonly />
+                    <input type="text" inputmode="decimal" class="product-quantity num-decimal" name="products[${index}][qta]" id="product-qty-${productCount}" value="0" />
                     <button type="button" class="plus" onclick="changeQuantity(${productCount}, 1)">+</button>
                 </div>
             </td>
