@@ -11385,6 +11385,56 @@ ORDER BY s.data_scadenza ASC',
         return response()->json(['righe' => $righe]);
     }
 
+    public function dorig_aggiorna($id_riga, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $r = DB::table('dorig')->where('id', $id_riga)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$r) return redirect()->back()->with('error', 'Riga non trovata');
+
+        $qta        = (float) $request->input('qta', $r->qta);
+        $pu         = (float) $request->input('prezzo_unitario', $r->prezzo_unitario);
+        $iva        = (int)   $request->input('iva', $r->iva);
+        $descr      = $request->input('descrizione', $r->descrizione);
+        $materiale  = (float) $request->input('materiale', $r->materiale ?? 0);
+
+        $pt         = round($qta * $pu, 2);
+        $imponibile = $pt + $materiale;
+        $imposta    = round($imponibile - ($imponibile / (1 + ($iva / 100))), 2);
+        $imponibile = round($imponibile - $imposta, 2);
+        $totale     = round($imponibile + $imposta, 2);
+
+        DB::table('dorig')->where('id', $id_riga)->where('id_azienda', $utente->id_azienda)->update([
+            'descrizione'       => $descr,
+            'qta'               => $qta,
+            'pu'                => $pu,
+            'pt'                => $pt,
+            'prezzo_unitario'   => $pu,
+            'prezzo_totale'     => $pt,
+            'prezzo_totale_iva' => $totale,
+            'iva'               => $iva,
+            'imponibile'        => $imponibile,
+            'imposta'           => $imposta,
+            'totale'            => $totale,
+            'materiale'         => $materiale,
+        ]);
+
+        \App\Services\ApplicaLavorazione::ricalcolaAggregatiDotes((int) $r->id_dotes, (int) $utente->id_azienda);
+
+        return redirect()->back()->with('success', 'Riga aggiornata');
+    }
+
+    public function dorig_elimina($id_riga, Request $request)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $r = DB::table('dorig')->where('id', $id_riga)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$r) return redirect()->back()->with('error', 'Riga non trovata');
+        DB::table('dorig')->where('id', $id_riga)->where('id_azienda', $utente->id_azienda)->delete();
+        \App\Services\ApplicaLavorazione::ricalcolaAggregatiDotes((int) $r->id_dotes, (int) $utente->id_azienda);
+        return redirect()->back()->with('success', 'Riga eliminata');
+    }
+
     public function dorig_duplica($id_riga, Request $request)
     {
         $this->is_loggato();

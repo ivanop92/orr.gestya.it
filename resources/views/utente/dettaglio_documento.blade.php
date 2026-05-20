@@ -144,13 +144,63 @@
                                         <td>€ {{number_format($riga->prezzo_unitario, 2, ',', '.')}}</td>
                                         <td>{{$riga->iva}}%</td>
                                         <td class="text-end">€ {{number_format($riga->prezzo_totale, 2, ',', '.')}}</td>
-                                        <td class="text-end">
+                                        <td class="text-end" style="white-space:nowrap;">
+                                            <button type="button" class="btn btn-sm btn-soft-primary" title="Modifica riga"
+                                                    data-bs-toggle="modal" data-bs-target="#modal_modifica_riga_{{ $riga->id }}">
+                                                <i class="ri-pencil-line"></i>
+                                            </button>
                                             <form method="post" action="/utente/dorig/{{ $riga->id }}/duplica" class="d-inline" onsubmit="return confirm('Duplicare questa riga?');">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-soft-secondary" title="Duplica riga"><i class="ri-file-copy-line"></i></button>
                                             </form>
+                                            <form method="post" action="/utente/dorig/{{ $riga->id }}/elimina" class="d-inline" onsubmit="return confirm('Eliminare questa riga?');">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-soft-danger" title="Elimina riga"><i class="ri-delete-bin-line"></i></button>
+                                            </form>
                                         </td>
                                     </tr>
+
+                                    <div class="modal fade" id="modal_modifica_riga_{{ $riga->id }}" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <form method="post" action="/utente/dorig/{{ $riga->id }}/aggiorna">
+                                                    @csrf
+                                                    <div class="modal-header bg-soft-primary">
+                                                        <h5 class="modal-title">Modifica Riga</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Descrizione</label>
+                                                            <textarea name="descrizione" rows="2" class="form-control">{{ $riga->descrizione }}</textarea>
+                                                        </div>
+                                                        <div class="row g-2">
+                                                            <div class="col-4">
+                                                                <label class="form-label">Quantità</label>
+                                                                <input type="number" step="0.001" name="qta" class="form-control" value="{{ $riga->qta }}">
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label class="form-label">Prezzo unitario €</label>
+                                                                <input type="number" step="0.01" name="prezzo_unitario" class="form-control" value="{{ $riga->prezzo_unitario }}">
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label class="form-label">IVA %</label>
+                                                                <input type="number" step="1" name="iva" class="form-control" value="{{ $riga->iva }}">
+                                                            </div>
+                                                            <div class="col-12">
+                                                                <label class="form-label">Materiale € (opz.)</label>
+                                                                <input type="number" step="0.01" name="materiale" class="form-control" value="{{ $riga->materiale ?? 0 }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annulla</button>
+                                                        <button type="submit" class="btn btn-primary">Salva</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
                                 @endforeach
                                 </tbody>
                             </table>

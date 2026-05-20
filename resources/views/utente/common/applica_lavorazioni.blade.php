@@ -87,13 +87,15 @@
                         return;
                     }
                     var html = '<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr>';
-                    html += '<th style="width:30px;"></th><th>Codice</th><th>Descrizione</th><th class="text-end">P.U.</th><th class="text-end">Qta/Min</th><th class="text-end">Totale</th></tr></thead><tbody>';
+                    html += '<th style="width:30px;"></th><th>Servizio</th><th>Codice</th><th>Descrizione</th><th class="text-end">P.U.</th><th class="text-end">Qta/Min</th><th class="text-end">Totale</th></tr></thead><tbody>';
                     d.righe.forEach(function(r){
                         var qta = (parseFloat(r.minuti) > 0) ? (r.minuti + ' min') : (r.qta + ' pz');
                         var tot = (parseFloat(r.imponibile) + parseFloat(r.imposta)).toFixed(2);
+                        var srv = r.servizio ? '<span class="badge bg-soft-info text-info">'+r.servizio+'</span>' : '';
                         html += '<tr>';
                         html += '<td><input type="checkbox" name="id_lavorazioni_righe[]" value="'+r.id+'" class="form-check-input"></td>';
-                        html += '<td><code>'+(r.codice||'')+'</code></td>';
+                        html += '<td>'+srv+'</td>';
+                        html += '<td><code>'+(r.codice||'-')+'</code></td>';
                         html += '<td>'+(r.descrizione||'')+'</td>';
                         html += '<td class="text-end">€ '+parseFloat(r.pu||0).toFixed(2)+'</td>';
                         html += '<td class="text-end">'+qta+'</td>';
