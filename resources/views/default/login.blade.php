@@ -88,7 +88,11 @@
                                     </div>
 
                                     <div class="mt-4">
+                                        @if(!empty($error))
+                                            <div class="alert alert-danger">{{ $error }}</div>
+                                        @endif
                                         <form method="post">
+                                            @csrf
 
                                             <div class="mb-3">
                                                 <label for="username" class="form-label">Email </label>
