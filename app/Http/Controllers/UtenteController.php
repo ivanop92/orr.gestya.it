@@ -4576,15 +4576,17 @@ ORDER BY s.data_scadenza ASC',
                 }
             }
 
-            $datiDotes = array_filter($dati, function($key) {
-                return $key !== 'products' && $key !== 'product_id' && $key !== 'product_name' && $key !== 'scadenziario' && $key !== 'deleted_rows';
+            // Filtra solo le colonne realmente esistenti nella tabella dotes
+            $colonneDotes = \Illuminate\Support\Facades\Schema::getColumnListing('dotes');
+            $datiDotes = array_filter($dati, function($key) use ($colonneDotes) {
+                return in_array($key, $colonneDotes, true);
             }, ARRAY_FILTER_USE_KEY);
 
 
             $datiDotes['id_azienda'] = $utente->id_azienda; // Aggiungi l'azienda
-            $datiDotes['imponibile'] = (float)str_replace(['€', ' '], '', $datiDotes['imponibile']);
-            $datiDotes['imposta'] = (float)str_replace(['€', ' '], '', $datiDotes['imposta']);
-            $datiDotes['totale'] = (float)str_replace(['€', ' '], '', $datiDotes['totale']);
+            if (isset($datiDotes['imponibile'])) $datiDotes['imponibile'] = (float)str_replace(['€', ' '], '', $datiDotes['imponibile']);
+            if (isset($datiDotes['imposta']))    $datiDotes['imposta']    = (float)str_replace(['€', ' '], '', $datiDotes['imposta']);
+            if (isset($datiDotes['totale']))     $datiDotes['totale']     = (float)str_replace(['€', ' '], '', $datiDotes['totale']);
 
             // Gestione id_commessa: se è vuoto, imposta NULL
             if (isset($datiDotes['id_commessa']) && empty($datiDotes['id_commessa'])) {
