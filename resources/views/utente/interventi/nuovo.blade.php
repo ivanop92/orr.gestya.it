@@ -25,11 +25,24 @@
                     <strong>Step 1 — Ufficio:</strong> apri il ticket di intervento con cliente, vagone e motivo del rientro. Le righe di lavoro verranno aggiunte negli step successivi.
                 </div>
 
-                <form method="post" autocomplete="off">
+                <form method="post" autocomplete="off" enctype="multipart/form-data">
                     @csrf
+
+                    <div class="card border-primary mb-3">
+                        <div class="card-header bg-soft-primary">
+                            <h5 class="card-title mb-0"><i class="ri-file-upload-line me-1"></i> Ordinativo Cliente (allegato)</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">
+                                Carica il PDF/email dell'ordinativo ricevuto dal cliente. I dati di dettaglio (CUU, attività richieste, ecc.) sono già nel documento e il manutentore li leggerà da lì — qui sotto basta indicare i campi minimi per identificare l'intervento.
+                            </p>
+                            <input type="file" name="ordinativo_file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.eml,.msg,.doc,.docx">
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-header">
-                            <h5 class="card-title mb-0">Dati Intervento</h5>
+                            <h5 class="card-title mb-0">Dati Intervento <small class="text-muted">(solo i campi minimi)</small></h5>
                         </div>
                         <div class="card-body">
                             <div class="row g-3">

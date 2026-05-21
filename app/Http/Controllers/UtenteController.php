@@ -11861,6 +11861,24 @@ ORDER BY s.data_scadenza ASC',
         return View::make('manutentore.dashboard', compact('utente', 'interventi'));
     }
 
+    public function manutentore_ordinativo_download($id)
+    {
+        $utente = $this->_check_manutentore();
+        $int = DB::table('interventi')
+            ->where('id', $id)
+            ->where('id_azienda', $utente->id_azienda)
+            ->where('id_operatore_assegnato', $utente->id)
+            ->first();
+        if (!$int || empty($int->ordinativo_file)) {
+            return Redirect::to('manutentore/intervento/'.$id)->with('error', 'Ordinativo non trovato');
+        }
+        $path = public_path('uploads/interventi/ordinativi/' . $int->ordinativo_file);
+        if (!file_exists($path)) {
+            return Redirect::to('manutentore/intervento/'.$id)->with('error', 'File ordinativo mancante sul server');
+        }
+        return response()->download($path, $int->ordinativo_filename_originale ?: $int->ordinativo_file);
+    }
+
     public function manutentore_intervento($id, Request $request)
     {
         $utente = $this->_check_manutentore();
@@ -12235,6 +12253,23 @@ ORDER BY s.data_scadenza ASC',
             $clean = function ($v) { return ($v === null || $v === '') ? null : $v; };
             $id_vagone = !empty($dati['id_vagone']) ? (int) $dati['id_vagone'] : null;
 
+            // Upload ordinativo (PDF/foto/email) ricevuto dal cliente
+            $ordinativoStored = null;
+            $ordinativoOriginale = null;
+            $ordinativoCaricatoIl = null;
+            if ($request->hasFile('ordinativo_file')) {
+                $f = $request->file('ordinativo_file');
+                if ($f->isValid()) {
+                    $ordinativoOriginale = $f->getClientOriginalName();
+                    $ext = $f->getClientOriginalExtension() ?: 'pdf';
+                    $ordinativoStored = 'ord_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $dest = public_path('uploads/interventi/ordinativi');
+                    if (!is_dir($dest)) { @mkdir($dest, 0775, true); }
+                    $f->move($dest, $ordinativoStored);
+                    $ordinativoCaricatoIl = date('Y-m-d H:i:s');
+                }
+            }
+
             $now = date('Y-m-d H:i:s');
             $id_int = DB::table('interventi')->insertGetId([
                 'id_azienda'             => $utente->id_azienda,
@@ -12252,6 +12287,9 @@ ORDER BY s.data_scadenza ASC',
                 'impianto'               => $clean($dati['impianto'] ?? null),
                 'pdm_riferimento'        => $clean($dati['pdm_riferimento'] ?? null) ?: 'VPI',
                 'odl_numero'             => $clean($dati['odl_numero'] ?? null),
+                'ordinativo_file'              => $ordinativoStored,
+                'ordinativo_filename_originale'=> $ordinativoOriginale,
+                'ordinativo_caricato_il'       => $ordinativoCaricatoIl,
                 'step_corrente'          => 1,
                 'stato'                  => 'in_corso',
                 'created_at'             => $now,
@@ -12275,6 +12313,21 @@ ORDER BY s.data_scadenza ASC',
         $vagoni  = DB::table('vagoni')->where('id_azienda', $utente->id_azienda)->where('attivo', 1)->orderBy('codice')->get();
         $page = 'interventi';
         return View::make('utente.interventi.nuovo', compact('utente', 'clienti', 'vagoni', 'page'));
+    }
+
+    public function interventi_ordinativo_download($id)
+    {
+        $this->is_loggato();
+        $utente = session('utente');
+        $int = DB::table('interventi')->where('id', $id)->where('id_azienda', $utente->id_azienda)->first();
+        if (!$int || empty($int->ordinativo_file)) {
+            return Redirect::to('utente/interventi/'.$id)->with('error', 'Ordinativo non trovato');
+        }
+        $path = public_path('uploads/interventi/ordinativi/' . $int->ordinativo_file);
+        if (!file_exists($path)) {
+            return Redirect::to('utente/interventi/'.$id)->with('error', 'File ordinativo mancante sul server');
+        }
+        return response()->download($path, $int->ordinativo_filename_originale ?: $int->ordinativo_file);
     }
 
     public function interventi_dettaglio($id, Request $request)

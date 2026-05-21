@@ -92,6 +92,19 @@
                     <div class="val">{{ $intervento->note }}</div>
                 </div>
             @endif
+            @if(!empty($intervento->ordinativo_file))
+                <div class="info-row">
+                    <div class="label">Ordinativo cliente</div>
+                    <div class="val">
+                        <a href="/manutentore/intervento/{{ $intervento->id }}/ordinativo" target="_blank" class="btn btn-sm btn-primary">
+                            <i class="ri-file-pdf-line me-1"></i> Apri ordinativo
+                        </a>
+                        @if(!empty($intervento->ordinativo_filename_originale))
+                            <div class="text-muted small mt-1">{{ $intervento->ordinativo_filename_originale }}</div>
+                        @endif
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 

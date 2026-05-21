@@ -45,6 +45,7 @@ Route::get('utente/ajax/catalogo_lavorazioni_righe',array('uses'=>'UtenteControl
 Route::any('utente/interventi',array('uses'=>'UtenteController@interventi'));
 Route::any('utente/interventi/nuovo',array('uses'=>'UtenteController@interventi_nuovo'));
 Route::any('utente/interventi/{id}',array('uses'=>'UtenteController@interventi_dettaglio'));
+Route::get('utente/interventi/{id}/ordinativo/download',array('uses'=>'UtenteController@interventi_ordinativo_download'));
 Route::post('utente/interventi/{id}/completa_step',array('uses'=>'UtenteController@interventi_completa_step'));
 Route::post('utente/interventi/{id}/step2_assegna',array('uses'=>'UtenteController@interventi_step_2_assegna'));
 Route::post('utente/interventi/{id}/step3_report',array('uses'=>'UtenteController@interventi_step_3_report'));
@@ -73,6 +74,7 @@ Route::get('utente/interventi/{id}/fattura/xml',array('uses'=>'UtenteController@
 // Dashboard Manutentore (responsive smartphone/tablet)
 Route::any('manutentore/dashboard',array('uses'=>'UtenteController@manutentore_dashboard'));
 Route::any('manutentore/intervento/{id}',array('uses'=>'UtenteController@manutentore_intervento'));
+Route::get('manutentore/intervento/{id}/ordinativo',array('uses'=>'UtenteController@manutentore_ordinativo_download'));
 Route::post('manutentore/intervento/{id}/invia_report',array('uses'=>'UtenteController@manutentore_invia_report'));
 Route::any('manutentore/storico',array('uses'=>'UtenteController@manutentore_storico'));
 Route::post('manutentore/allegato/{id_allegato}/elimina',array('uses'=>'UtenteController@manutentore_elimina_allegato'));

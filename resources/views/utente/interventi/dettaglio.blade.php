@@ -120,6 +120,24 @@
             </div>
         </div>
 
+        @if(!empty($intervento->ordinativo_file))
+            <div class="alert alert-primary d-flex align-items-center mb-3" role="alert">
+                <i class="ri-file-pdf-line fs-22 me-2"></i>
+                <div class="flex-grow-1">
+                    <strong>Ordinativo cliente</strong>
+                    @if(!empty($intervento->ordinativo_filename_originale))
+                        <span class="text-muted">— {{ $intervento->ordinativo_filename_originale }}</span>
+                    @endif
+                    @if(!empty($intervento->ordinativo_caricato_il))
+                        <small class="text-muted ms-2">(caricato {{ \Carbon\Carbon::parse($intervento->ordinativo_caricato_il)->format('d/m/Y H:i') }})</small>
+                    @endif
+                </div>
+                <a href="/utente/interventi/{{ $intervento->id }}/ordinativo/download" class="btn btn-primary btn-sm" target="_blank">
+                    <i class="ri-download-2-line me-1"></i> Apri / Scarica
+                </a>
+            </div>
+        @endif
+
         <div class="row">
             {{-- COLONNA AZIONE STEP CORRENTE --}}
             <div class="col-lg-8">
