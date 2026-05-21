@@ -7,16 +7,51 @@
             <div class="col-12">
                 <div class="page-title-box d-sm-flex align-items-center justify-content-between">
                     <h4 class="mb-sm-0">Dettaglio Documento</h4>
-                    <div class="page-title-right">
-                        <ol class="breadcrumb m-0">
-                            <li class="breadcrumb-item"><a href="javascript: void(0);">Documenti</a></li>
-                            <li class="breadcrumb-item active">Dettaglio</li>
-                        </ol>
+                    <div class="page-title-right d-flex gap-2">
+                        @php
+                            $interventoCollegato = null;
+                            if (!empty($dotes->id) && \Illuminate\Support\Facades\Schema::hasTable('interventi')) {
+                                $interventoCollegato = DB::table('interventi')
+                                    ->where('id_azienda', $utente->id_azienda)
+                                    ->where(function($q) use ($dotes){
+                                        $q->where('id_dotes_preventivo', $dotes->id)
+                                          ->orWhere('id_dotes_certificato', $dotes->id)
+                                          ->orWhere('id_dotes_fattura', $dotes->id);
+                                    })
+                                    ->first();
+                            }
+                        @endphp
+                        @if($interventoCollegato)
+                            <a href="{{ url('utente/interventi/'.$interventoCollegato->id) }}" class="btn btn-light">
+                                <i class="ri-arrow-left-line align-middle me-1"></i> Torna all'intervento
+                            </a>
+                        @endif
+                        <a href="{{ url('utente/modifica_documento/'.$dotes->id) }}" class="btn btn-primary">
+                            <i class="ri-edit-line align-middle me-1"></i> Modifica documento
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
         <!-- end page title -->
+
+        @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="ri-check-line align-middle me-1"></i> {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        @if(session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="ri-error-warning-line align-middle me-1"></i> {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+
+        <div class="alert alert-info py-2 small mb-3">
+            <i class="ri-information-line me-1"></i>
+            Le azioni sulle righe (<strong>Applica Lavorazioni</strong>, <strong>Modifica</strong>, <strong>Duplica</strong>, <strong>Elimina</strong>) e il riordino drag-drop sono <strong>salvati automaticamente</strong>. Per cambiare testata/cliente/scadenze usa <strong>Modifica documento</strong> in alto a destra.
+        </div>
 
         @include('utente.common.workflow_accettazione', ['dotes' => $dotes, 'utente' => $utente])
         @include('utente.common.applica_lavorazioni', ['dotes' => $dotes, 'utente' => $utente])
