@@ -543,6 +543,28 @@
 
             {{-- SIDEBAR DATI INTERVENTO --}}
             <div class="col-lg-4">
+                @if(!empty($intervento->reason_intake) || !empty($intervento->report_danni))
+                    <div class="card border-warning mb-3">
+                        <div class="card-header bg-soft-warning">
+                            <h5 class="card-title mb-0"><i class="ri-alert-line me-1"></i> Descrizione guasto</h5>
+                        </div>
+                        <div class="card-body">
+                            @if(!empty($intervento->reason_intake))
+                                <div class="mb-2">
+                                    <div class="small text-muted">Motivo del rientro (ufficio)</div>
+                                    <div class="fw-semibold">{{ $intervento->reason_intake }}</div>
+                                </div>
+                            @endif
+                            @if(!empty($intervento->report_danni))
+                                <div class="@if(!empty($intervento->reason_intake)) border-top pt-2 mt-2 @endif">
+                                    <div class="small text-muted">Report danni (manutentore)</div>
+                                    <div style="white-space: pre-wrap;">{{ $intervento->report_danni }}</div>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+
                 <div class="card">
                     <div class="card-header">
                         <h5 class="card-title mb-0">Dati dell'intervento</h5>
@@ -560,9 +582,6 @@
 
                             <dt class="small text-muted">Località</dt>
                             <dd>{{ $intervento->localita ?: '—' }}</dd>
-
-                            <dt class="small text-muted">Motivo rientro</dt>
-                            <dd>{{ $intervento->reason_intake ?: '—' }}</dd>
 
                             <dt class="small text-muted">Priorità</dt>
                             <dd>
