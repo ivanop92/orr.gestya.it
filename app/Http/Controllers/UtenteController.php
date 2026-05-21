@@ -12315,6 +12315,26 @@ ORDER BY s.data_scadenza ASC',
         return View::make('utente.interventi.nuovo', compact('utente', 'clienti', 'vagoni', 'page'));
     }
 
+    public function interventi_ordinativo_parse(Request $request)
+    {
+        $this->is_loggato();
+        if (!$request->hasFile('ordinativo_file')) {
+            return response()->json(['ok' => false, 'error' => 'Nessun file'], 400);
+        }
+        $f = $request->file('ordinativo_file');
+        if (!$f->isValid()) {
+            return response()->json(['ok' => false, 'error' => 'Upload non valido'], 400);
+        }
+        $ext = strtolower($f->getClientOriginalExtension());
+        if ($ext !== 'pdf') {
+            return response()->json(['ok' => true, 'parsed' => null, 'note' => 'Solo PDF testuali possono essere analizzati']);
+        }
+        $tmp = $f->getRealPath();
+        $parsed = \App\Services\OrdinativoParser::parsePdf($tmp);
+        unset($parsed['raw_text']);
+        return response()->json(['ok' => true, 'parsed' => $parsed]);
+    }
+
     public function interventi_ordinativo_download($id)
     {
         $this->is_loggato();

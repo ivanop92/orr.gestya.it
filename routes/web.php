@@ -46,6 +46,7 @@ Route::any('utente/interventi',array('uses'=>'UtenteController@interventi'));
 Route::any('utente/interventi/nuovo',array('uses'=>'UtenteController@interventi_nuovo'));
 Route::any('utente/interventi/{id}',array('uses'=>'UtenteController@interventi_dettaglio'));
 Route::get('utente/interventi/{id}/ordinativo/download',array('uses'=>'UtenteController@interventi_ordinativo_download'));
+Route::post('utente/interventi/ajax/parse_ordinativo',array('uses'=>'UtenteController@interventi_ordinativo_parse'));
 Route::post('utente/interventi/{id}/completa_step',array('uses'=>'UtenteController@interventi_completa_step'));
 Route::post('utente/interventi/{id}/step2_assegna',array('uses'=>'UtenteController@interventi_step_2_assegna'));
 Route::post('utente/interventi/{id}/step3_report',array('uses'=>'UtenteController@interventi_step_3_report'));

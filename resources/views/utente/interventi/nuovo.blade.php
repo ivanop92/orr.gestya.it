@@ -36,7 +36,8 @@
                             <p class="text-muted small mb-2">
                                 Carica il PDF/email dell'ordinativo ricevuto dal cliente. I dati di dettaglio (CUU, attività richieste, ecc.) sono già nel documento e il manutentore li leggerà da lì — qui sotto basta indicare i campi minimi per identificare l'intervento.
                             </p>
-                            <input type="file" name="ordinativo_file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.eml,.msg,.doc,.docx">
+                            <input type="file" name="ordinativo_file" id="ordinativo_file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.eml,.msg,.doc,.docx" onchange="parseOrdinativo(this)">
+                            <div id="ordinativo_parse_status" class="small mt-2"></div>
                         </div>
                     </div>
 
@@ -143,3 +144,57 @@
 </div>
 
 @include('utente.common.footer')
+
+<script>
+    function parseOrdinativo(input){
+        var status = document.getElementById('ordinativo_parse_status');
+        if (!input.files || input.files.length === 0) { status.innerHTML = ''; return; }
+        var f = input.files[0];
+        if (!/\.pdf$/i.test(f.name)) {
+            status.innerHTML = '<i class="ri-information-line text-muted me-1"></i> Estrazione automatica supportata solo per PDF testuali. Compila i campi manualmente.';
+            return;
+        }
+        status.innerHTML = '<i class="mdi mdi-loading mdi-spin me-1 text-primary"></i> Analisi PDF in corso...';
+        var fd = new FormData();
+        fd.append('ordinativo_file', f);
+        fd.append('_token', document.querySelector('input[name=_token]').value);
+        fetch('/utente/interventi/ajax/parse_ordinativo', { method: 'POST', body: fd })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d.ok || !d.parsed) {
+                    status.innerHTML = '<i class="ri-information-line text-muted me-1"></i> ' + (d.note || 'Estrazione non disponibile per questo file');
+                    return;
+                }
+                var p = d.parsed, riempiti = [];
+                function setIfEmpty(name, value, label){
+                    if (!value) return;
+                    var el = document.querySelector('[name="'+name+'"]');
+                    if (!el) return;
+                    if (el.tagName === 'SELECT') {
+                        var opt = Array.from(el.options).find(function(o){ return o.value.toUpperCase() === String(value).toUpperCase() || o.text.toUpperCase() === String(value).toUpperCase(); });
+                        if (opt && !el.value) { el.value = opt.value; riempiti.push(label); }
+                    } else if (!el.value || (name === 'pdm_riferimento' && el.value === 'VPI')) {
+                        el.value = value;
+                        riempiti.push(label);
+                    }
+                }
+                setIfEmpty('numero_ordine_cliente', p.numero_ordine_cliente, 'N. ordine');
+                setIfEmpty('codice_cuu',            p.codice_cuu,            'CUU');
+                setIfEmpty('impianto',              p.impianto,              'Impianto');
+                setIfEmpty('odl_numero',            p.odl_numero,            'OdL');
+                setIfEmpty('pdm_riferimento',       p.pdm_riferimento,       'PdM');
+                setIfEmpty('data_apertura',         p.data_apertura,         'Data');
+                setIfEmpty('reason_intake',         p.reason_intake,         'Motivo');
+                setIfEmpty('automezzo',             p.automezzo,             'Automezzo');
+                if (riempiti.length > 0) {
+                    status.innerHTML = '<i class="ri-check-line text-success me-1"></i> Auto-compilati: <strong>' + riempiti.join(', ') + '</strong>. Verifica e correggi se necessario.';
+                } else {
+                    status.innerHTML = '<i class="ri-information-line text-muted me-1"></i> Nessun campo riconosciuto automaticamente. Compila manualmente i dati minimi.';
+                }
+            })
+            .catch(function(){
+                status.innerHTML = '<i class="ri-error-warning-line text-danger me-1"></i> Errore durante l\'analisi del PDF';
+            });
+    }
+</script>
+
