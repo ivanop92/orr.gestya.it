@@ -10,6 +10,9 @@
 | the IoC container for the system binding all of the various parts.
 |
 */
+// Fix logout casuali su Apache/Windows (mpm_winnt + PHP ZTS): evita che putenv()
+// faccia sovrascrivere APP_KEY tra i siti nello stesso processo.
+\Illuminate\Support\Env::disablePutenv();
 
 $app = new Illuminate\Foundation\Application(
     $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)
